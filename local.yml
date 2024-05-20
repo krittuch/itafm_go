@@ -1,0 +1,27 @@
+version: "3"
+
+volumes:
+  local_postgres_aods: {}
+  api_volume: {}
+  pgadmin: {}
+
+services:
+  api:
+    container_name: itafm_aods
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    ports:
+      - 8080:8080
+    restart: always
+    env_file:
+      - ./.envs/.local/.postgres
+      - ./.envs/.local/.mqtt
+    volumes:
+      - ./:/app
+    networks:
+      - fullstack
+
+networks:
+  fullstack:
+    driver: bridge

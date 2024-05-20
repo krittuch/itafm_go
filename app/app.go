@@ -10,7 +10,7 @@ type App struct {
 	DB *sql.DB
 }
 
-func (a *App) CreateConntection() {
+func (a *App) CreateConnection() {
 	connStr := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable",
 		UNAMEDB, PASSDB, HOSTDB, DBNAME)
 
