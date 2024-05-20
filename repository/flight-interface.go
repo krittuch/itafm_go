@@ -5,5 +5,6 @@ import (
 )
 
 type FlightInterface interface {
+	InsertFlight(*model.PostFlight)
 	UpdateFlight(*model.PatchFlight) (*model.Flight, error)
 }

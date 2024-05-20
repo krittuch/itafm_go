@@ -4,12 +4,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-stomp/stomp/v3"
 
+	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
 )
 
@@ -100,12 +103,12 @@ func recvFltMessages(subscribed chan bool, db *sql.DB) {
 		return
 	}
 
-	// flightController := controller.NewFlightController(db)
+	flightController := controller.NewFlightController(db)
 
 	for {
 		msg := <-sub.C
 
-		data := model.Command{}
+		data := model.AODSFlightMovement{}
 		err := json.Unmarshal(msg.Body, &data)
 
 		if err != nil {
@@ -133,7 +136,66 @@ func recvFltMessages(subscribed chan bool, db *sql.DB) {
 				log.Println("err on regex : $1", err2)
 			}
 
-			// fplctrl.InsertJSONFlightPlan(&fplData)
+			// Used parameter : CALLSIGN, ACTYPE, ETD, DEPARTURE, DESTINATION
+			// Convert to flight model :
+			// CALLSIGN -> FlightNumber (With iata code)
+			// ACTYPE -> AircraftType (Cut prefix 1 char)
+			// DOF + ETD -> ScheduleFlightTime
+			// DEPARTURE -> PrevStation
+			// DESTINATION -> NextStation
+			// if DEPARTURE == VTBS then Type = DEP else Type = ARR
+			//
+			postFlight := model.PostFlight{
+				AircraftType: fplData.ACTYPE,
+				NextStation:  fplData.DESTINATION,
+				PrevStation:  fplData.DEPARTURE,
+			}
+
+			// Change icao to iata
+
+			airlineController := controller.NewAirlineController(db)
+
+			airline, errAirline := airlineController.GetAirline(fplData.CALLSIGN[:3])
+
+			if errAirline != nil {
+				log.Println(errAirline)
+				continue
+			}
+
+			postFlight.FlightNumber = fmt.Sprint(airline.IATA, " ", fplData.CALLSIGN[3:])
+
+			// Choose Flight Type
+
+			if fplData.DEPARTURE == "VTBS" {
+				postFlight.Type = "DEP"
+			} else {
+				postFlight.Type = "ARR"
+			}
+
+			// Create STD
+			dateOfFlight := ""
+
+			if fplData.DOF == "" {
+				t := time.Now()
+				timeString := t.Format("2006-01-02 15:04:05")
+				dateOfFlight = fmt.Sprint(strings.Split(timeString, " ")[0], " ", fplData.ETD, "Z")
+			} else {
+				dateOfFlight = fmt.Sprint("20", fplData.DOF)
+				dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
+				dateOfFlight = fmt.Sprint(dateOfFlight, " ", fplData.ETD, "Z")
+			}
+
+			std, errTime := time.Parse("2006-01-02 15:04:05", dateOfFlight)
+
+			if errTime != nil {
+				log.Println(errTime)
+				continue
+			}
+
+			postFlight.ScheduleFlightTime = std
+
+			flightController.InsertFlight(&postFlight)
+
 			log.Println(fplData)
 		} else {
 			fmvData := model.AODSFlightMovement{}

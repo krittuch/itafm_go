@@ -29,6 +29,15 @@ type Flight struct {
 	RelateFlightID     *int       `json:"relate_flight_id,omitempty"`
 }
 
+type PostFlight struct {
+	AircraftType       string    `json:"aircraft"`
+	Type               string    `json:"type"`
+	ScheduleFlightTime time.Time `json:"schedule_flight_time"`
+	FlightNumber       string    `json:"flight_number"`
+	NextStation        string    `json:"next_station"`
+	PrevStation        string    `json:"prev_station"`
+}
+
 type PatchFlight struct {
 	ID                 int        `json:"id"`
 	ActualFlightTime   *time.Time `json:"actual_flight_time"`

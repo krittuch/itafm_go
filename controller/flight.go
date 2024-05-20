@@ -9,6 +9,7 @@ import (
 )
 
 type FlightControllerInterface interface {
+	InsertFlight(*model.PostFlight)
 	UpdateFlight(*model.PatchFlight) error
 }
 
@@ -26,6 +27,15 @@ func (f *FlightController) UpdateFlight(flight *model.PatchFlight) {
 
 	repo := repository.NewFlightRepository(f.DB)
 	err := repo.UpdateFlight(flight)
+
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func (f *FlightController) InsertFlight(flight *model.PostFlight) {
+	repo := repository.NewFlightRepository(f.DB)
+	err := repo.InsertFlight(flight)
 
 	if err != nil {
 		log.Println(err)

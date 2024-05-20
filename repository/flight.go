@@ -65,3 +65,30 @@ func (f *FlightRepository) UpdateFlight(flight *model.PatchFlight) error {
 
 	return nil
 }
+
+func (f *FlightRepository) InsertFlight(flight *model.PostFlight) error {
+
+	stmt, err := f.DB.Prepare(`INSERT INTO flight_flight 
+	(aircraft_type, type, schedule_flight_time, flight_number, next_station, prev_station) 
+	VALUES ($1, $2, $3, $4, $5, $6)`)
+
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	_, err2 := stmt.Exec(
+		flight.AircraftType,
+		flight.Type,
+		flight.ScheduleFlightTime,
+		flight.FlightNumber,
+		flight.NextStation,
+		flight.PrevStation)
+
+	if err2 != nil {
+		return err2
+	}
+
+	return nil
+}
