@@ -34,6 +34,7 @@ func StartConnectMQTT(a *App) {
 	go recvIDEPMessages(subIDEP, a.DB)
 	go recvFltMessages(subFlight, a.DB)
 
+
 	select {}
 	// <-subscribed
 

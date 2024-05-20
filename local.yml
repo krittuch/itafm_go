@@ -7,7 +7,7 @@ volumes:
 
 services:
   api:
-    container_name: itafm_aods
+    container_name: aods_api
     build:
       context: .
       dockerfile: Dockerfile.local
@@ -18,7 +18,7 @@ services:
       - ./.envs/.local/.postgres
       - ./.envs/.local/.mqtt
     volumes:
-      - ./:/app
+      - .:/usr/src/app/
     networks:
       - fullstack
 

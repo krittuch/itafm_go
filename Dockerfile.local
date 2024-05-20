@@ -10,4 +10,4 @@ RUN go build -v -o main .
 
 EXPOSE 8080
 
-ENTRYPOINT CompileDaemon --build="go build main.go" --command=./main
+CMD ["air"]
