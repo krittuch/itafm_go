@@ -12,3 +12,7 @@ type AODSFlightMovement struct {
 	DOF         string `json:"DOF"`
 	ITEM18      string `json:"ITEM18"`
 }
+
+type Command struct {
+	CMD string `json:CMD`
+}

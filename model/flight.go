@@ -28,3 +28,13 @@ type Flight struct {
 	Type               string     `json:"type"`
 	RelateFlightID     *int       `json:"relate_flight_id,omitempty"`
 }
+
+type PatchFlight struct {
+	ID                 int        `json:"id"`
+	ActualFlightTime   *time.Time `json:"actual_flight_time"`
+	EstimateFlightTime *time.Time `json:"estimate_flight_time"`
+	ScheduleFlightTime *time.Time `json:"schedule_flight_time"`
+	Canceled           *bool      `json:"canceled"`
+	Bay                *string    `json:"bay"`
+	Gate               *string    `json:"gate"`
+}
