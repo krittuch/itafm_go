@@ -31,8 +31,14 @@ func StartConnectMQTT(a *App) {
 	flag.Parse()
 	subFlight := make(chan bool)
 	subIDEP := make(chan bool)
-	go recvIDEPMessages(subIDEP, a.DB)
-	go recvFltMessages(subFlight, a.DB)
+	conn, err := stomp.Dial("tcp", *serverAddr, options...)
+
+	if err != nil {
+		log.Panicln(err)
+		return
+	}
+	go recvIDEPMessages(subIDEP, a.DB, conn)
+	go recvFltMessages(subFlight, a.DB, conn)
 
 	select {}
 	// <-subscribed
@@ -40,17 +46,10 @@ func StartConnectMQTT(a *App) {
 	// <-stop
 }
 
-func recvIDEPMessages(subscribe chan bool, db *sql.DB) {
+func recvIDEPMessages(subscribe chan bool, db *sql.DB, conn *stomp.Conn) {
 	defer func() {
 		stop <- true
 	}()
-
-	conn, err := stomp.Dial("tcp", *serverAddr, options...)
-
-	if err != nil {
-		log.Println("cannot connect to server", err.Error())
-		return
-	}
 
 	sub, err := conn.Subscribe(*queueIDEPName, stomp.AckAuto)
 	if err != nil {
@@ -82,17 +81,10 @@ func recvIDEPMessages(subscribe chan bool, db *sql.DB) {
 
 }
 
-func recvFltMessages(subscribed chan bool, db *sql.DB) {
+func recvFltMessages(subscribed chan bool, db *sql.DB, conn *stomp.Conn) {
 	defer func() {
 		stop <- true
 	}()
-
-	conn, err := stomp.Dial("tcp", *serverAddr, options...)
-
-	if err != nil {
-		log.Println("cannot connect to server", err.Error())
-		return
-	}
 
 	sub, err := conn.Subscribe(*queueFLMOName, stomp.AckAuto)
 	if err != nil {
