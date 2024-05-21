@@ -1,0 +1,26 @@
+version: "3"
+
+volumes:
+  api_volume: {}
+  pgadmin: {}
+
+services:
+  api:
+    container_name: aods_api_dev
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - 8080:8080
+    restart: always
+    env_file:
+      - ./.envs/.development/.postgres
+      - ./.envs/.development/.mqtt
+    volumes:
+      - .:/usr/src/app/
+    networks:
+      - fullstack
+
+networks:
+  fullstack:
+    driver: bridge

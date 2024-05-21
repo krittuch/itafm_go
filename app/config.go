@@ -15,4 +15,7 @@ var (
 	MQTT_PORT       = os.Getenv("MQTT_PORT")
 	MQTT_USER       = os.Getenv("MQTT_USER")
 	MQTT_PASSWORD   = os.Getenv("MQTT_PASSWORD")
+
+	MQTT_FLIGHT_MOVEMENT_TOPIC = os.Getenv("MQTT_FLIGHT_MOVEMENT_TOPIC")
+	MQTT_IDEP_TOPIC = os.Getenv("MQTT_IDEP_TOPIC")
 )

@@ -17,8 +17,8 @@ import (
 )
 
 var serverAddr = flag.String("server", MQTT_IP_ADDRESS+":"+MQTT_PORT, "AODS server endpoint")
-var queueFLMOName = flag.String("flmqueue", "/queue/FLMO_ITFM_Queue", "FLMO Queue")
-var queueIDEPName = flag.String("idepqueue", "/queue/IDEP_ITFM_Queue", "IDEP Queue")
+var queueFLMOName = flag.String("flmtopic", MQTT_FLIGHT_MOVEMENT_TOPIC, "FLMO Topic")
+var queueIDEPName = flag.String("ideptopic", MQTT_IDEP_TOPIC, "IDEP Topic")
 var stop = make(chan bool)
 
 var options []func(*stomp.Conn) error = []func(*stomp.Conn) error{
@@ -38,6 +38,7 @@ func StartConnectMQTT(a *App) {
 	// <-subscribed
 
 	// <-stop
+	log.Println("Stop MQTT Message")
 }
 
 func recvIDEPMessages(subscribe chan bool, db *sql.DB) {
@@ -47,12 +48,14 @@ func recvIDEPMessages(subscribe chan bool, db *sql.DB) {
 
 	conn, err := stomp.Dial("tcp", *serverAddr, options...)
 
+
 	if err != nil {
 		log.Println("cannot connect to server", err.Error())
 		return
 	}
 
 	sub, err := conn.Subscribe(*queueIDEPName, stomp.AckAuto)
+	
 	if err != nil {
 		log.Println("cannot subscribe to", *queueIDEPName, err.Error())
 		return
@@ -63,14 +66,17 @@ func recvIDEPMessages(subscribe chan bool, db *sql.DB) {
 
 	for {
 		msg := <-sub.C
+
+		if len(msg.Body) <= 0 {
+			log.Println("Message is Empty")
+			continue
+		}
+
 		data := model.IDEP{}
 		err := json.Unmarshal(msg.Body, &data)
 
-		log.Println("IDEP MSG Receive")
-
 		if err != nil {
 			log.Println("Error IDEP")
-
 			log.Println(err)
 			log.Println(string(msg.Body))
 			continue
@@ -100,13 +106,21 @@ func recvFltMessages(subscribed chan bool, db *sql.DB) {
 		return
 	}
 
+	log.Println("Connect to Flight Movement")
+
 	flightController := controller.NewFlightController(db)
 
 	for {
 		msg := <-sub.C
 
+		if len(msg.Body) <= 0 {
+			log.Println("Message is Empty")
+			continue
+		}
+
 		data := model.AODSFlightMovement{}
 		err := json.Unmarshal(msg.Body, &data)
+
 
 		if err != nil {
 			log.Println("Flight Movement")
@@ -114,6 +128,9 @@ func recvFltMessages(subscribed chan bool, db *sql.DB) {
 			log.Println(string(msg.Body))
 			continue
 		}
+
+		log.Println(string(msg.Body))
+
 
 		if data.CMD == "FPL" {
 			fplData := model.FlightPlan{}
