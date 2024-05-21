@@ -16,16 +16,13 @@ import (
 	"aerothai/itafm/model"
 )
 
-const defaultPort = ":61613"
-
-var serverAddr = flag.String("server", "172.16.21.223:61613", "AODS server endpoint")
+var serverAddr = flag.String("server", MQTT_IP_ADDRESS+":"+MQTT_PORT, "AODS server endpoint")
 var queueFLMOName = flag.String("flmqueue", "/queue/FLMO_ITFM_Queue", "FLMO Queue")
-var topicSvlName = flag.String("topic", "/topic/AS62_VTBB_ITFM_Topic", "Survillance Topic")
 var queueIDEPName = flag.String("idepqueue", "/queue/IDEP_ITFM_Queue", "IDEP Queue")
 var stop = make(chan bool)
 
 var options []func(*stomp.Conn) error = []func(*stomp.Conn) error{
-	stomp.ConnOpt.Login("itfm", "itfm"),
+	stomp.ConnOpt.Login(MQTT_USER, MQTT_PASSWORD),
 	stomp.ConnOpt.Host("/"),
 	stomp.ConnOpt.HeartBeat(30, 30),
 }
@@ -36,7 +33,6 @@ func StartConnectMQTT(a *App) {
 	subIDEP := make(chan bool)
 	go recvIDEPMessages(subIDEP, a.DB)
 	go recvFltMessages(subFlight, a.DB)
-
 
 	select {}
 	// <-subscribed
