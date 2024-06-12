@@ -6,7 +6,7 @@ volumes:
 
 services:
   api:
-    container_name: aods_api_dev
+    container_name: itafm_aods_gw_dev
     build:
       context: .
       dockerfile: Dockerfile.dev
