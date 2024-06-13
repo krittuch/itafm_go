@@ -17,7 +17,7 @@ import (
 )
 
 var serverAddr = flag.String("server", MQTT_IP_ADDRESS+":"+MQTT_PORT, "AODS server endpoint")
-var queueFLMOName = flag.String("flmtopic", MQTT_FLIGHT_MOVEMENT_TOPIC, "FLMO Topic")
+var queueFLMOName = flag.String("flmtopic", MQTT_FLIGHT_MOVEMENT_QUEUE, "FLMO Topic")
 var queueIDEPName = flag.String("ideptopic", MQTT_IDEP_TOPIC, "IDEP Topic")
 var stop = make(chan bool)
 
@@ -25,19 +25,21 @@ var options []func(*stomp.Conn) error = []func(*stomp.Conn) error{
 	stomp.ConnOpt.Login(MQTT_USER, MQTT_PASSWORD),
 	stomp.ConnOpt.Host("/"),
 	stomp.ConnOpt.HeartBeat(30, 30),
+	stomp.ConnOpt.HeartBeatError(360 * time.Second),
 }
 
 func StartConnectMQTT(a *App) {
 	flag.Parse()
 	subFlight := make(chan bool)
-	subIDEP := make(chan bool)
+	// subIDEP := make(chan bool)
+	log.Println(serverAddr)
 	conn, err := stomp.Dial("tcp", *serverAddr, options...)
 
 	if err != nil {
 		log.Panicln(err)
 		return
 	}
-	go recvIDEPMessages(subIDEP, a.DB, conn)
+	// go recvIDEPMessages(subIDEP, a.DB, conn)
 	go recvFltMessages(subFlight, a.DB, conn)
 
 	select {}
@@ -53,7 +55,7 @@ func recvIDEPMessages(subscribe chan bool, db *sql.DB, conn *stomp.Conn) {
 	}()
 
 	sub, err := conn.Subscribe(*queueIDEPName, stomp.AckAuto)
-	
+
 	if err != nil {
 		log.Println("cannot subscribe to", *queueIDEPName, err.Error())
 		return
@@ -66,6 +68,7 @@ func recvIDEPMessages(subscribe chan bool, db *sql.DB, conn *stomp.Conn) {
 		msg := <-sub.C
 
 		if len(msg.Body) <= 0 {
+			log.Println(msg.Body)
 			log.Println("Message is Empty")
 			continue
 		}
@@ -105,6 +108,7 @@ func recvFltMessages(subscribed chan bool, db *sql.DB, conn *stomp.Conn) {
 		msg := <-sub.C
 
 		if len(msg.Body) <= 0 {
+			log.Println(msg.Body)
 			log.Println("Message is Empty")
 			continue
 		}
@@ -112,16 +116,14 @@ func recvFltMessages(subscribed chan bool, db *sql.DB, conn *stomp.Conn) {
 		data := model.AODSFlightMovement{}
 		err := json.Unmarshal(msg.Body, &data)
 
-
 		if err != nil {
-			log.Println("Flight Movement")
+			log.Println("Erro  on Flight Movement mqtt")
 			log.Println(err)
 			log.Println(string(msg.Body))
 			continue
 		}
 
 		log.Println(string(msg.Body))
-
 
 		if data.CMD == "FPL" {
 			fplData := model.FlightPlan{}
@@ -183,11 +185,11 @@ func recvFltMessages(subscribed chan bool, db *sql.DB, conn *stomp.Conn) {
 			if fplData.DOF == "" {
 				t := time.Now()
 				timeString := t.Format("2006-01-02 15:04:05")
-				dateOfFlight = fmt.Sprint(strings.Split(timeString, " ")[0], " ", fplData.ETD, "Z")
+				dateOfFlight = strings.Join([]string{strings.Split(timeString, " ")[0], " ", fplData.ETD[:2], ":", fplData.ETD[2:4], ":00"}, "")
 			} else {
-				dateOfFlight = fmt.Sprint("20", fplData.DOF)
+				dateOfFlight = strings.Join([]string{"20", fplData.DOF}, "")
 				dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
-				dateOfFlight = fmt.Sprint(dateOfFlight, " ", fplData.ETD, "Z")
+				dateOfFlight = strings.Join([]string{dateOfFlight, " ", fplData.ETD[:2], ":", fplData.ETD[2:4], ":00"}, "")
 			}
 
 			std, errTime := time.Parse("2006-01-02 15:04:05", dateOfFlight)
@@ -201,7 +203,6 @@ func recvFltMessages(subscribed chan bool, db *sql.DB, conn *stomp.Conn) {
 
 			flightController.InsertFlight(&postFlight)
 
-			log.Println(fplData)
 		} else {
 			fmvData := model.AODSFlightMovement{}
 			err := json.Unmarshal(msg.Body, &fmvData)
@@ -211,8 +212,46 @@ func recvFltMessages(subscribed chan bool, db *sql.DB, conn *stomp.Conn) {
 				continue
 			}
 
+			// Change icao to iata
+
+			airlineController := controller.NewAirlineController(db)
+
+			airline, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3])
+
+			if errAirline != nil {
+				log.Println(errAirline)
+				continue
+			}
+
+			flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
+
+			// Create ATD
+			dateOfFlight := ""
+			time := ""
+
+			if fmvData.CMD == "DEP" {
+				time = fmvData.TIME1
+			} else if fmvData.CMD == "ARR" {
+				time = fmvData.TIME2
+			}
+
+			dateOfFlight = strings.Join([]string{"20", fmvData.DOF}, "")
+			dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
+			dateOfFlight = strings.Join([]string{dateOfFlight, " ", time[:2], ":", time[2:4], ":00"}, "")
+
+			atd, errTime := time.Parse("2006-01-02 15:04:05", dateOfFlight)
+
+			if errTime != nil {
+				log.Println(errTime)
+				continue
+			}
+
+			flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, atd)
+
 			// fmvctrl.InsertJSONFlightMovement(&fmvData)
-			log.Println(fmvData)
+			// log.Println(fmvData)
+
+			log.Println("Finished Insert Flight Movement")
 		}
 	}
 

@@ -11,6 +11,7 @@ import (
 type FlightControllerInterface interface {
 	InsertFlight(*model.PostFlight)
 	UpdateFlight(*model.PatchFlight) error
+	UpdateDepartureFlight(string, string, string)
 }
 
 type FlightController struct {
@@ -40,4 +41,10 @@ func (f *FlightController) InsertFlight(flight *model.PostFlight) {
 	if err != nil {
 		log.Println(err)
 	}
+}
+
+func (f *FlightController) UpdateDepartureFlight(flightNumber string, date string, datetime string) {
+	repo := repository.NewFlightRepository(f.DB)
+	datetime = 
+	err := repo.UpdateFlight()
 }

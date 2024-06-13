@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"aerothai/itafm/model"
 )
@@ -69,7 +70,7 @@ func (f *FlightRepository) UpdateFlight(flight *model.PatchFlight) error {
 func (f *FlightRepository) InsertFlight(flight *model.PostFlight) error {
 
 	stmt, err := f.DB.Prepare(`INSERT INTO flight_flight 
-	(aircraft_type, type, schedule_flight_time, flight_number, next_station, prev_station,
+	(aircraft, type, schedule_flight_time, flight_number, next_station, prev_station,
 	 working, finished, canceled, created_at, updated_at
 	) 
 	VALUES ($1, $2, $3, $4, $5, $6, false, false, false, now(), now())`)
@@ -87,6 +88,28 @@ func (f *FlightRepository) InsertFlight(flight *model.PostFlight) error {
 		flight.FlightNumber,
 		flight.NextStation,
 		flight.PrevStation)
+
+	if err2 != nil {
+		return err2
+	}
+
+	return nil
+}
+
+func (f *FlightRepository) UpdateDepartureFlight(flightNumber string, date string, time string) error {
+
+	aft = strings.Join(string[date[]], "")
+	
+	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET actual_flight_time=$1 
+	WHERE flight_number = $2 & schedule_flight_time >= $3`)
+
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	_, err2 := stmt.Exec(qString, flight.ID)
 
 	if err2 != nil {
 		return err2

@@ -11,17 +11,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.local
-    ports:
-      - 8080:8080
+
     restart: always
     env_file:
       - ./.envs/.local/.postgres
       - ./.envs/.local/.mqtt
     volumes:
       - .:/usr/src/app/
-    networks:
-      - fullstack
+    network_mode: host
 
-networks:
-  fullstack:
-    driver: bridge

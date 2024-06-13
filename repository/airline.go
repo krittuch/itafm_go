@@ -27,7 +27,7 @@ func (a *AirlineRepository) GetAirline(icaoCode string) (model.Airline, error) {
 	)
 
 	err := a.DB.QueryRow(`
-	SELECT name, iata, icao, callsign, country 
+	SELECT name, iata, icao, call_sign, country 
 	FROM flight_airlinecode 
 	WHERE icao = $1`,
 		icaoCode).Scan(
