@@ -20,4 +20,5 @@ type FlightPlan struct {
 	ALTN2       string `json:"ALTN2"`
 	DOF         string `json:"DOF"`
 	ITEM18      string `json:"ITEM18"`
+	REGISTER 		string `json:"REGISTER"`
 }

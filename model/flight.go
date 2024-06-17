@@ -36,6 +36,7 @@ type PostFlight struct {
 	FlightNumber       string    `json:"flight_number"`
 	NextStation        string    `json:"next_station"`
 	PrevStation        string    `json:"prev_station"`
+	Register string `json:"ac_register"`
 }
 
 type PatchFlight struct {

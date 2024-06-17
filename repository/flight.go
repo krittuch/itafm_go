@@ -3,7 +3,8 @@ package repository
 import (
 	"database/sql"
 	"fmt"
-	"strings"
+	"log"
+	"time"
 
 	"aerothai/itafm/model"
 )
@@ -16,6 +17,36 @@ func NewFlightRepository(db *sql.DB) *FlightRepository {
 	return &FlightRepository{
 		DB: db,
 	}
+}
+
+func (f *FlightRepository) GetFlight(fn string, std string) (model.Flight, error) {
+	var (
+		id                 int
+		flightNumber       string
+		scheduleFlightTime *time.Time
+	)
+
+	err := f.DB.QueryRow(`
+	SELECT id, flight_number, schedule_flight_time
+	FROM flight_flight
+	WHERE flight_number = $1, schedule_flight_time = $2`,
+		fn, std).Scan(
+		&id,
+		&flightNumber,
+		&scheduleFlightTime,
+	)
+
+	if err != nil {
+		return model.Flight{}, err
+	}
+
+	flight := model.Flight{
+		ID:                 id,
+		FlightNumber:       flightNumber,
+		ScheduleFlightTime: scheduleFlightTime,
+	}
+
+	return flight, nil
 }
 
 func (f *FlightRepository) UpdateFlight(flight *model.PatchFlight) error {
@@ -52,6 +83,8 @@ func (f *FlightRepository) UpdateFlight(flight *model.PatchFlight) error {
 
 	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET $1 WHERE id = $2`)
 
+	log.Println(qString)
+
 	if err != nil {
 		return err
 	}
@@ -71,9 +104,9 @@ func (f *FlightRepository) InsertFlight(flight *model.PostFlight) error {
 
 	stmt, err := f.DB.Prepare(`INSERT INTO flight_flight 
 	(aircraft, type, schedule_flight_time, flight_number, next_station, prev_station,
-	 working, finished, canceled, created_at, updated_at
+	ac_register, working, finished, canceled, created_at, updated_at
 	) 
-	VALUES ($1, $2, $3, $4, $5, $6, false, false, false, now(), now())`)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, false, false, false, now(), now())`)
 
 	if err != nil {
 		return err
@@ -87,7 +120,8 @@ func (f *FlightRepository) InsertFlight(flight *model.PostFlight) error {
 		flight.ScheduleFlightTime,
 		flight.FlightNumber,
 		flight.NextStation,
-		flight.PrevStation)
+		flight.PrevStation,
+		flight.Register)
 
 	if err2 != nil {
 		return err2
@@ -96,12 +130,10 @@ func (f *FlightRepository) InsertFlight(flight *model.PostFlight) error {
 	return nil
 }
 
-func (f *FlightRepository) UpdateDepartureFlight(flightNumber string, date string, time string) error {
+func (f *FlightRepository) UpdateDepartureFlight(flightNumber string, date string, datetime string) error {
 
-	aft = strings.Join(string[date[]], "")
-	
 	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET actual_flight_time=$1 
-	WHERE flight_number = $2 & schedule_flight_time >= $3`)
+	WHERE flight_number = $2 and schedule_flight_time >= $3`)
 
 	if err != nil {
 		return err
@@ -109,7 +141,26 @@ func (f *FlightRepository) UpdateDepartureFlight(flightNumber string, date strin
 
 	defer stmt.Close()
 
-	_, err2 := stmt.Exec(qString, flight.ID)
+	_, err2 := stmt.Exec(datetime, flightNumber, date)
+
+	if err2 != nil {
+		return err2
+	}
+
+	return nil
+}
+
+func (f *FlightRepository) UpdateBay(flightNumber string, std string, bay string) error {
+	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET bay=$1 
+	WHERE flight_number = $2 and schedule_flight_time >= $3`)
+
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	_, err2 := stmt.Exec(bay, flightNumber, std)
 
 	if err2 != nil {
 		return err2
