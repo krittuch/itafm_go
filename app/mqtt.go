@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"time"
 
@@ -27,24 +26,27 @@ var options []func(*stomp.Conn) error = []func(*stomp.Conn) error{
 }
 
 func StartConnectMQTT(a *App) {
-	flag.Parse()
-	subFlight := make(chan bool)
-	subIDEP := make(chan bool)
-	log.Println(serverAddr)
-	conn, err := stomp.Dial("tcp", *serverAddr, options...)
+	for {
+		flag.Parse()
+		subFlight := make(chan bool)
+		subIDEP := make(chan bool)
+		conn, err := stomp.Dial("tcp", *serverAddr, options...)
 
-	if err != nil {
-		log.Panicln(err)
+		if err != nil {
+			log.Println("Failed to connect to MQTT server:", err)
+			log.Println("Attempting to reconnect in 5 minutes...")
+			time.Sleep(5 * time.Minute)
+			continue
+		}
+
+		go recvIDEPMessages(subIDEP, a.DB, conn)
+		go recvFltMessages(subFlight, a.DB, conn)
+
+		// Listen for a stop signal to break the loop and end the function
+		<-stop
+		log.Println("Stop MQTT Message")
 		return
 	}
-	go recvIDEPMessages(subIDEP, a.DB, conn)
-	go recvFltMessages(subFlight, a.DB, conn)
-
-	select {}
-	// <-subscribed
-
-	// <-stop
-	log.Println("Stop MQTT Message")
 }
 
 func recvIDEPMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
@@ -60,7 +62,7 @@ func recvIDEPMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 	}
 
 	log.Println("Connect To iDEP")
-	// flightController := controller.NewFlightController(db)
+	flightController := controller.NewFlightController(db)
 
 	for {
 		msg := <-sub.C
@@ -71,42 +73,7 @@ func recvIDEPMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 			continue
 		}
 
-		data := model.IDEP{}
-		err := json.Unmarshal(msg.Body, &data)
-
-		if err != nil {
-			log.Println("Error IDEP")
-			log.Println(err)
-			log.Println(string(msg.Body))
-			continue
-		}
-
-		log.Println("IDEP Receive")
-		log.Println(string(msg.Body))
-
-		bay := data.DepartureParkingStand
-		if bay == "" {
-			bay = data.ArrivalParkingStand
-		}
-
-		if bay == "" {
-			continue
-		}
-
-		airlineController := controller.NewAirlineController(db)
-
-		airline, errAirline := airlineController.GetAirline(data.AircraftID[:3])
-
-		if errAirline != nil {
-			log.Println(errAirline)
-			return
-		}
-
-		flightNumber := fmt.Sprint(airline.IATA, " ", data.AircraftID[3:])
-
-		fltCtl := controller.NewFlightController(db)
-
-		fltCtl.UpdateBay(flightNumber, data.EOBT, bay)
+		onIDEPReceive(msg, db, flightController)
 
 	}
 
@@ -122,8 +89,6 @@ func recvFltMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 		log.Println("cannot subscribe to", *topicFLMOName, err.Error())
 		return
 	}
-
-	log.Println("Connect to Flight Movement")
 
 	flightController := controller.NewFlightController(db)
 
@@ -148,9 +113,12 @@ func recvFltMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 
 		if data.CMD == "FPL" {
 			onFPLReceive(msg, db, flightController)
-		} else {
+		} else if data.CMD == "DEP" || data.CMD == "ARR" {
 			onCMDReceive(msg, db, flightController)
+		} else if data.CMD == "CNL" {
+			onCNLReceive(msg, db, flightController)
+		} else if data.CMD == "DLY" {
+			onDLYReceive(msg, db, flightController)
 		}
 	}
-
 }

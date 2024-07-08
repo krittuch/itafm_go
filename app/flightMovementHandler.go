@@ -57,10 +57,13 @@ func onFPLReceive(
 
 	airlineController := controller.NewAirlineController(db)
 
-	airline, errAirline := airlineController.GetAirline(fplData.CALLSIGN[:3])
+	airlineCodeRegex := regexp.MustCompile(`^[A-Z]{3}`)
+	icaoCode := airlineCodeRegex.FindString(fplData.CALLSIGN)
+
+	airline, errAirline := airlineController.GetAirline(icaoCode)
 
 	if errAirline != nil {
-		log.Println(errAirline)
+		// log.Println(errAirline)
 		return
 	}
 
@@ -68,7 +71,7 @@ func onFPLReceive(
 
 	// Choose Flight Type
 
-	if fplData.DEPARTURE == "VTBS" {
+	if fplData.DEPARTURE == "VTBS" || fplData.DEPARTURE == "VTBD" {
 		postFlight.Type = "DEP"
 	} else {
 		postFlight.Type = "ARR"
@@ -83,8 +86,12 @@ func onFPLReceive(
 		dateOfFlight = strings.Join([]string{strings.Split(timeString, " ")[0], " ", fplData.ETD[:2], ":", fplData.ETD[2:4], ":00"}, "")
 	} else {
 		dateOfFlight = strings.Join([]string{"20", fplData.DOF}, "")
-		dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
-		dateOfFlight = strings.Join([]string{dateOfFlight, " ", fplData.ETD[:2], ":", fplData.ETD[2:4], ":00"}, "")
+		if len(dateOfFlight) >= 4 {
+			dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
+			dateOfFlight = strings.Join([]string{dateOfFlight, " ", fplData.ETD[:2], ":", fplData.ETD[2:4], ":00"}, "")
+		} else {
+			return
+		}
 	}
 
 	std, errTime := time.Parse("2006-01-02 15:04:05", dateOfFlight)
@@ -96,15 +103,70 @@ func onFPLReceive(
 
 	postFlight.ScheduleFlightTime = std
 
-	_, errFlight := flightController.GetFlight(postFlight.FlightNumber, postFlight.ScheduleFlightTime.String())
-
-	if errFlight != nil { // Mean there are no flight
-		flightController.InsertFlight(&postFlight)
-	}
+	flightController.InsertFlight(&postFlight)
 
 }
 
 func onCMDReceive(
+	msg *stomp.Message,
+	db *sql.DB,
+	flightController *controller.FlightController) {
+	fmvData := model.AODSFlightMovement{}
+	err := json.Unmarshal(msg.Body, &fmvData)
+	if err != nil {
+		log.Println(err)
+		log.Println(string(msg.Body))
+		return
+	}
+
+	// Change icao to iata
+
+	airlineController := controller.NewAirlineController(db)
+
+	airlineCodeRegex := regexp.MustCompile(`^[A-Z]{3}`)
+	icaoCode := airlineCodeRegex.FindString(fmvData.CALLSIGN)
+
+	airline, errAirline := airlineController.GetAirline(icaoCode)
+
+	if errAirline != nil {
+		return
+	}
+
+	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
+
+	// Create ATD
+	dateOfFlight := ""
+	timeStr := ""
+
+	if fmvData.CMD == "DEP" {
+		timeStr = fmvData.TIME1
+		dateOfFlight = strings.Join([]string{"20", fmvData.DOF}, "")
+		if len(dateOfFlight) < 4 {
+			log.Println("Error DEP CMD", dateOfFlight)
+			return
+		}
+		dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
+		dateOfFlight = strings.Join([]string{dateOfFlight, " ", timeStr[:2], ":", timeStr[2:4], ":00+00"}, "")
+	} else if fmvData.CMD == "ARR" {
+		timeStr = fmvData.TIME2
+		t := time.Now()
+		timeString := t.Format("2006-01-02 15:04:05")
+		dString := strings.Split(timeString, " ")[0]
+
+		fmvData.DOF = dString
+		dateOfFlight = strings.Join([]string{
+			dString, " ",
+			timeStr[:2], ":",
+			timeStr[2:4], ":00+00",
+		}, "")
+	} else {
+		return
+	}
+
+	flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, dateOfFlight)
+}
+
+func onCNLReceive(
 	msg *stomp.Message,
 	db *sql.DB,
 	flightController *controller.FlightController) {
@@ -130,30 +192,48 @@ func onCMDReceive(
 
 	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
 
+	log.Println(string(msg.Body))
+	log.Println(flightNumber)
+
 	// Create ATD
-	dateOfFlight := ""
-	timeStr := ""
+	// dateOfFlight := ""
+	// timeStr := ""
 
-	if fmvData.CMD == "DEP" {
-		timeStr = fmvData.TIME1
-		dateOfFlight = strings.Join([]string{"20", fmvData.DOF}, "")
-		dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
-		dateOfFlight = strings.Join([]string{dateOfFlight, " ", timeStr[:2], ":", timeStr[2:4], ":00+00"}, "")
-	} else if fmvData.CMD == "ARR" {
-		timeStr = fmvData.TIME2
-		t := time.Now()
-		timeString := t.Format("2006-01-02 15:04:05")
-		dString := strings.Split(timeString, " ")[0]
+	// flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, dateOfFlight)
+}
 
-		fmvData.DOF = dString
-		dateOfFlight = strings.Join([]string{
-			dString, " ",
-			timeStr[:2], ":",
-			timeStr[2:4], ":00+00",
-		}, "")
-	} else {
+func onDLYReceive(
+	msg *stomp.Message,
+	db *sql.DB,
+	flightController *controller.FlightController) {
+	fmvData := model.AODSFlightMovement{}
+	err := json.Unmarshal(msg.Body, &fmvData)
+	if err != nil {
+		log.Println(err)
+		log.Println(string(msg.Body))
 		return
 	}
 
-	flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, dateOfFlight)
+	// Change icao to iata
+
+	airlineController := controller.NewAirlineController(db)
+
+	airline, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3])
+
+	if errAirline != nil {
+		log.Println("Could not find airline")
+		log.Println(errAirline)
+		return
+	}
+
+	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
+
+	log.Println(string(msg.Body))
+	log.Println(flightNumber)
+
+	// Create ATD
+	// dateOfFlight := ""
+	// timeStr := ""
+
+	// flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, dateOfFlight)
 }

@@ -36,11 +36,12 @@ type PostFlight struct {
 	FlightNumber       string    `json:"flight_number"`
 	NextStation        string    `json:"next_station"`
 	PrevStation        string    `json:"prev_station"`
-	Register string `json:"ac_register"`
+	Register           string    `json:"ac_register"`
 }
 
 type PatchFlight struct {
 	ID                 int        `json:"id"`
+	FlightNumber       string     `json:"flight_number"`
 	ActualFlightTime   *time.Time `json:"actual_flight_time"`
 	EstimateFlightTime *time.Time `json:"estimate_flight_time"`
 	ScheduleFlightTime *time.Time `json:"schedule_flight_time"`
