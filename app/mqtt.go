@@ -76,6 +76,12 @@ func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 	// Create connection to itafm mqtt
 	client := initITAFM()
 
+	if token := client.Connect(); token.Wait() && token.Error() != nil {
+		log.Println(token.Error())
+		return
+	}
+
+
 	for {
 		msg := <-sub.C
 
@@ -87,10 +93,7 @@ func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 
 		survController := controller.NewSurveillanceController(db)
 
-		onSurveillanceReceive(msg, db, survController)
-
-		// Also Send to itafm
-		sendToITAFM(client, *itafmSurvTopicName, string(msg.Body))
+		onSurveillanceReceive(msg, db, survController, client)
 	}
 }
 

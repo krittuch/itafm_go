@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/go-stomp/stomp/v3"
+	mqtt "github.com/eclipse/paho.mqtt.golang" 
 
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
@@ -13,7 +14,8 @@ import (
 
 func onSurveillanceReceive(msg *stomp.Message,
 	db *sql.DB,
-	surveillanceController *controller.SurveillanceController) {
+	surveillanceController *controller.SurveillanceController,
+	client mqtt.Client) {
 
 	survData := model.AODSSurveillance{}
 	err := json.Unmarshal(msg.Body, &survData)
@@ -30,4 +32,7 @@ func onSurveillanceReceive(msg *stomp.Message,
 
 
 	surveillanceController.InsertOrUpdateSurveillance(&survData)
+
+	// Also Send to itafm
+	sendToITAFM(client, *itafmSurvTopicName, string(msg.Body))
 }
