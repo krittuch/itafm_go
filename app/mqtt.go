@@ -76,6 +76,10 @@ func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 			continue
 		}
 
+		survController := controller.NewSurveillanceController(db)
+
+		onSurveillanceReceive(msg, db, survController)
+
 	}
 }
 
