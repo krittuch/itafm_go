@@ -74,14 +74,7 @@ func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 	}
 
 	// Create connection to itafm mqtt
-	itafmConn, errCon := stomp.Dial("tcp", *itafmServerAddr, itafmOptions...)
-
-	if errCon != nil {
-		log.Println("cannot connect to", *itafmServerAddr, errCon.Error())
-		return
-	}
-
-	log.Println("Connect To SURV")
+	client := initITAFM()
 
 	for {
 		msg := <-sub.C
@@ -92,23 +85,12 @@ func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 			continue
 		}
 
-
 		survController := controller.NewSurveillanceController(db)
 
 		onSurveillanceReceive(msg, db, survController)
 
 		// Also Send to itafm
-		errSend := itafmConn.Send(
-			*itafmSurvTopicName,
-			"text/plain",
-			msg.Body,
-			stomp.SendOpt.Receipt,
-		)
-
-		if errSend != nil {
-			log.Println("error send to itafm", errSend.Error())
-		}
-
+		sendToITAFM(client, *itafmSurvTopicName, string(msg.Body))
 	}
 }
 
