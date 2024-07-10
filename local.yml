@@ -1,17 +1,11 @@
 version: "3"
 
-volumes:
-  local_postgres_aods: {}
-  api_volume: {}
-  pgadmin: {}
-
 services:
   gateway:
     container_name: itafm_aods_gw_dev
     build:
       context: .
       dockerfile: Dockerfile.local
-
     restart: always
     env_file:
       - ./.envs/.local/.postgres
@@ -19,4 +13,3 @@ services:
     volumes:
       - .:/usr/src/app/
     network_mode: host
-

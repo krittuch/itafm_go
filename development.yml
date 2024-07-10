@@ -1,26 +1,15 @@
 version: "3"
 
-volumes:
-  api_volume: {}
-  pgadmin: {}
-
 services:
-  api:
+  gateway:
     container_name: itafm_aods_gw_dev
     build:
       context: .
       dockerfile: Dockerfile.dev
-    ports:
-      - 8080:8080
     restart: always
     env_file:
       - ./.envs/.development/.postgres
       - ./.envs/.development/.mqtt
     volumes:
       - .:/usr/src/app/
-    networks:
-      - agos_server_network
-
-networks:
-  agos_server_network:
-    external: true
+    network_mode: host
