@@ -19,8 +19,8 @@ services:
     volumes:
       - .:/usr/src/app/
     networks:
-      - fullstack
+      - agos_server_network
 
 networks:
-  fullstack:
-    driver: bridge
+  agos_server_network:
+    external: true
