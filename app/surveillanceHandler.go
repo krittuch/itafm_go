@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"log"
 
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/go-stomp/stomp/v3"
-	mqtt "github.com/eclipse/paho.mqtt.golang" 
 
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
@@ -25,14 +25,32 @@ func onSurveillanceReceive(msg *stomp.Message,
 		return
 	}
 
-
 	if survData.Departure != "VTBS" && survData.Destination != "VTBS" {
 		return
 	}
 
+	// Change to IATA code
+	airlineController := controller.NewAirlineController(db)
+	icaoCode := survData.CallSign[:3]
+	airline, err := airlineController.GetAirline(icaoCode)
+
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	survData.CallSign = airline.IATA + survData.CallSign[3:]
 
 	surveillanceController.InsertOrUpdateSurveillance(&survData)
 
+	//Convert survData to string
+	survDataString, errMashal := json.Marshal(survData)
+	if errMashal != nil {
+		log.Println(errMashal)
+		return
+
+	}
+
 	// Also Send to itafm
-	sendToITAFM(client, *itafmSurvTopicName, string(msg.Body))
+	sendToITAFM(client, *itafmSurvTopicName, string(survDataString))
 }
