@@ -29,26 +29,26 @@ type PostSurveillance struct {
 	Destination     string `json:"destination"`
 	AircraftType    string `json:"actype"`
 	WakeTurbulance  string `json:"wturbulance"`
-	Lat             string `json:"latitude"`
-	Lon             string `json:"longitude"`
-	Altitude        string `json:"altitude"`
-	GroundSpeed     string `json:"gspeed"`
-	Heading         string `json:"heading"`
+	Lat             float64 `json:"latitude"`
+	Lon             float64 `json:"longitude"`
+	Altitude        float64 `json:"altitude"`
+	GroundSpeed     float64 `json:"gspeed"`
+	Heading         float64 `json:"heading"`
 	AircraftAddress string `json:"acaddress"`
-	SIC             string `json:"sic"`
-	SAC             string `json:"sac"`
+	SIC             int `json:"sic"`
+	SAC             int `json:"sac"`
 	SSRCode         string `json:"ssrcode"`
 	DateTime        string `json:"datetime"`
-	TrackNumber     string `json:"trackno"`
-	VX              string `json:"vx"`
-	VY              string `json:"vy"`
+	TrackNumber     int `json:"trackno"`
+	VX              float64 `json:"vx"`
+	VY              float64 `json:"vy"`
 	CDM             string `json:"cdm"`
 }
 
 type AODSSurveillance struct {
 	CallSign        string  `json:"CallSign"`
 	Departure       string  `json:"Dep"`
-	Dest            string  `json:"Dest"`
+	Destination            string  `json:"Dest"`
 	AircraftType    string  `json:"AircraftType"`
 	WakeTurbulance  string  `json:"WakeTurbulance"`
 	Lat             float64 `json:"Lat"`

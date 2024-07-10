@@ -8,7 +8,7 @@ import (
 )
 
 type SurveillanceInterface interface {
-	InsertOrUpdateSurveillance(*model.PostSurveillance) bool
+	InsertOrUpdateSurveillance(*model.AODSSurveillance) bool
 }
 
 type SurveillanceController struct {
@@ -21,7 +21,7 @@ func NewSurveillanceController(db *sql.DB) *SurveillanceController {
 	}
 }
 
-func (s *SurveillanceController) InsertOrUpdateSurveillance(surveillance *model.PostSurveillance) bool {
+func (s *SurveillanceController) InsertOrUpdateSurveillance(surveillance *model.AODSSurveillance) bool {
 	repo := repository.NewSurveillanceRepository(s.DB)
 	return repo.InsertOrUpdateSurveillance(surveillance)
 }

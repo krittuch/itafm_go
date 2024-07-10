@@ -8,7 +8,7 @@ import (
 )
 
 type SurveillanceRepositoryInterface interface {
-	InsertOrUpdateSurveillance(post *model.PostSurveillance) bool
+	InsertOrUpdateSurveillance(post *model.AODSSurveillance) bool
 	InsertSurveillance(post *model.AODSSurveillance) bool
 }
 
@@ -39,7 +39,7 @@ func (s *SurveillanceRepository) InsertSurveillance(post *model.AODSSurveillance
 	_, err2 := stmt.Exec(
 		post.CallSign,
 		post.Departure,
-		post.Dest,
+		post.Destination,
 		post.AircraftType,
 		post.WakeTurbulance,
 		post.Lat,
@@ -66,7 +66,7 @@ func (s *SurveillanceRepository) InsertSurveillance(post *model.AODSSurveillance
 	return true
 }
 
-func (s *SurveillanceRepository) InsertOrUpdateSurveillance(post *model.PostSurveillance) bool {
+func (s *SurveillanceRepository) InsertOrUpdateSurveillance(post *model.AODSSurveillance) bool {
 	stmt, err := s.DB.Prepare(`SELECT COUNT(*) FROM flight_aircraftlocation WHERE callsign = $1`)
 	if err != nil {
 		log.Println(err)
@@ -84,9 +84,9 @@ func (s *SurveillanceRepository) InsertOrUpdateSurveillance(post *model.PostSurv
 		stmt, err = s.DB.Prepare(`INSERT INTO flight_aircraftlocation (
 			callsign,departure,destination,actype,wturbulance,latitude,longitude
 			,altitude,gspeed,heading,acaddress,sic,sac,ssrcode
-			,datetime,trackno,vx,vy,cdm) 
+			,datetime,trackno,vx,vy,cdm, created_at, updated_at) 
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
-				$12,$13,$14,$15,$16,$17,$18,$19)`)
+				$12,$13,$14,$15,$16,$17,$18,$19,now(),now())`)
 		if err != nil {
 			log.Println(err)
 			return false
@@ -136,7 +136,8 @@ func (s *SurveillanceRepository) InsertOrUpdateSurveillance(post *model.PostSurv
 			trackno = $16,
 			vx = $17,
 			vy = $18,
-			cdm = $19
+			cdm = $19,
+			updated_at = now()
 			WHERE callsign = $1`)
 		if err != nil {
 			log.Println(err)
@@ -169,6 +170,7 @@ func (s *SurveillanceRepository) InsertOrUpdateSurveillance(post *model.PostSurv
 			return false
 		}
 	}
+
 
 	return true
 }

@@ -21,6 +21,8 @@ func (a *App) CreateConnection() {
 		log.Fatal(err)
 	}
 
+	log.Println("Connect To DB")
+
 	a.DB = db
 }
 

@@ -14,13 +14,22 @@ import (
 )
 
 var serverAddr = flag.String("server", MQTT_IP_ADDRESS+":"+MQTT_PORT, "AODS server endpoint")
+var itafmServerAddr = flag.String("itafmserver", ITAFM_MQTT_IP_ADDRESS+":"+ITAFM_MQTT_PORT, "AODS server endpoint")
 var topicFLMOName = flag.String("flmtopic", MQTT_FLIGHT_MOVEMENT_TOPIC, "FLMO Topic")
 var topicIDEPName = flag.String("ideptopic", MQTT_IDEP_TOPIC, "IDEP Topic")
 var topicSURVName = flag.String("survtopic", MQTT_SURV_TOPIC, "SURV Topic")
+var itafmSurvTopicName = flag.String("itafmsurvtopic", ITAFM_SURV_TOPIC, "SURV Topic")
 var stop = make(chan bool)
 
 var options []func(*stomp.Conn) error = []func(*stomp.Conn) error{
 	stomp.ConnOpt.Login(MQTT_USER, MQTT_PASSWORD),
+	stomp.ConnOpt.Host("/"),
+	stomp.ConnOpt.HeartBeat(30, 30),
+	stomp.ConnOpt.HeartBeatError(360 * time.Second),
+}
+
+var itafmOptions []func(*stomp.Conn) error = []func(*stomp.Conn) error{
+	stomp.ConnOpt.Login(ITAFM_MQTT_USER, ITAFM_MQTT_PASSWORD),
 	stomp.ConnOpt.Host("/"),
 	stomp.ConnOpt.HeartBeat(30, 30),
 	stomp.ConnOpt.HeartBeatError(360 * time.Second),
@@ -60,8 +69,15 @@ func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 	sub, err := conn.Subscribe(*topicSURVName, stomp.AckAuto)
 
 	if err != nil {
-
 		log.Println("cannot subscribe to", *topicSURVName, err.Error())
+		return
+	}
+
+	// Create connection to itafm mqtt
+	itafmConn, errCon := stomp.Dial("tcp", *itafmServerAddr, itafmOptions...)
+
+	if errCon != nil {
+		log.Println("cannot connect to", *itafmServerAddr, errCon.Error())
 		return
 	}
 
@@ -76,9 +92,22 @@ func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 			continue
 		}
 
+
 		survController := controller.NewSurveillanceController(db)
 
 		onSurveillanceReceive(msg, db, survController)
+
+		// Also Send to itafm
+		errSend := itafmConn.Send(
+			*itafmSurvTopicName,
+			"text/plain",
+			msg.Body,
+			stomp.SendOpt.Receipt,
+		)
+
+		if errSend != nil {
+			log.Println("error send to itafm", errSend.Error())
+		}
 
 	}
 }

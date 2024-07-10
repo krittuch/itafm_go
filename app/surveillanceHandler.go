@@ -3,6 +3,7 @@ package app
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 
 	"github.com/go-stomp/stomp/v3"
 
@@ -14,16 +15,19 @@ func onSurveillanceReceive(msg *stomp.Message,
 	db *sql.DB,
 	surveillanceController *controller.SurveillanceController) {
 
-	aodsMsg := model.PostSurveillance{}
-	err := json.Unmarshal(msg.Body, &aodsMsg)
+	survData := model.AODSSurveillance{}
+	err := json.Unmarshal(msg.Body, &survData)
 
 	if err != nil {
+		log.Println(err)
 		return
 	}
 
-	if aodsMsg.Departure != "VTBS" || aodsMsg.Destination != "VTBS" {
+
+	if survData.Departure != "VTBS" && survData.Destination != "VTBS" {
 		return
 	}
 
-	surveillanceController.InsertOrUpdateSurveillance(&aodsMsg)
+
+	surveillanceController.InsertOrUpdateSurveillance(&survData)
 }
