@@ -16,6 +16,7 @@ import (
 var serverAddr = flag.String("server", MQTT_IP_ADDRESS+":"+MQTT_PORT, "AODS server endpoint")
 var topicFLMOName = flag.String("flmtopic", MQTT_FLIGHT_MOVEMENT_TOPIC, "FLMO Topic")
 var topicIDEPName = flag.String("ideptopic", MQTT_IDEP_TOPIC, "IDEP Topic")
+var topicSURVName = flag.String("survtopic", MQTT_SURV_TOPIC, "SURV Topic")
 var stop = make(chan bool)
 
 var options []func(*stomp.Conn) error = []func(*stomp.Conn) error{
@@ -28,8 +29,9 @@ var options []func(*stomp.Conn) error = []func(*stomp.Conn) error{
 func StartConnectMQTT(a *App) {
 	for {
 		flag.Parse()
-		subFlight := make(chan bool)
-		subIDEP := make(chan bool)
+		// subFlight := make(chan bool)
+		// subIDEP := make(chan bool)
+		subSurv := make(chan bool)
 		conn, err := stomp.Dial("tcp", *serverAddr, options...)
 
 		if err != nil {
@@ -39,13 +41,41 @@ func StartConnectMQTT(a *App) {
 			continue
 		}
 
-		go recvIDEPMessages(subIDEP, a.DB, conn)
-		go recvFltMessages(subFlight, a.DB, conn)
+		// go recvIDEPMessages(subIDEP, a.DB, conn)
+		// go recvFltMessages(subFlight, a.DB, conn)
+		go recvSurvMessages(subSurv, a.DB, conn)
 
 		// Listen for a stop signal to break the loop and end the function
 		<-stop
 		log.Println("Stop MQTT Message")
 		return
+	}
+}
+
+func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
+	defer func() {
+		stop <- true
+	}()
+
+	sub, err := conn.Subscribe(*topicSURVName, stomp.AckAuto)
+
+	if err != nil {
+
+		log.Println("cannot subscribe to", *topicSURVName, err.Error())
+		return
+	}
+
+	log.Println("Connect To SURV")
+
+	for {
+		msg := <-sub.C
+
+		if len(msg.Body) <= 0 {
+			log.Println(msg.Body)
+			log.Println("Message is Empty")
+			continue
+		}
+
 	}
 }
 
