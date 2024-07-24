@@ -52,11 +52,7 @@ func StartConnectMQTT(a *App) {
 	if err := gocsv.UnmarshalFile(in, &airlines); err != nil {
 		panic(err)
 	}
-	for _, client := range airlines {
-		log.Println("Hello, ", client.Name)
-	}
 
-	return
 	for {
 		flag.Parse()
 		// subFlight := make(chan bool)
