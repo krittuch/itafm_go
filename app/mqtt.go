@@ -50,6 +50,7 @@ func StartConnectMQTT(a *App) {
 			continue
 		}
 
+		log.Println("Connected To AODS Server")
 		// go recvIDEPMessages(subIDEP, a.DB, conn)
 		// go recvFltMessages(subFlight, a.DB, conn)
 		go recvSurvMessages(subSurv, a.DB, conn)
@@ -81,9 +82,16 @@ func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 		return
 	}
 
+	log.Println("Connect to Surveillance")
+
 
 	for {
 		msg := <-sub.C
+
+		if msg.Err != nil {
+			log.Println(msg.Err)
+			continue
+		}
 
 		if len(msg.Body) <= 0 {
 			log.Println(msg.Body)

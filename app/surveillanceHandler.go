@@ -31,6 +31,9 @@ func onSurveillanceReceive(msg *stomp.Message,
 
 	// Change to IATA code
 	airlineController := controller.NewAirlineController(db)
+	if len(survData.CallSign) < 3 {
+		return
+	}
 	icaoCode := survData.CallSign[:3]
 	airline, err := airlineController.GetAirline(icaoCode)
 

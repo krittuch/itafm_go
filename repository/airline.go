@@ -2,7 +2,7 @@ package repository
 
 import (
 	"database/sql"
-
+	"log"
 	"aerothai/itafm/model"
 )
 
@@ -38,6 +38,7 @@ func (a *AirlineRepository) GetAirline(icaoCode string) (model.Airline, error) {
 		&country)
 
 	if err != nil {
+		log.Println(icaoCode)
 		return model.Airline{}, err
 	}
 
