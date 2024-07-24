@@ -8,6 +8,8 @@ github.com/githubnemo/CompileDaemon v1.4.0 h1:z96Qu4tj+RzRfF+L7f1O6E8ion5JQlisWe
 github.com/githubnemo/CompileDaemon v1.4.0/go.mod h1:/G125r3YBIp6rcXtCZfiEHwFzcl7GSsNSwylxSNrkMA=
 github.com/go-stomp/stomp/v3 v3.1.0 h1:JnvRJuua/fX2Lq5Ie5DXzrOL18dnzIUenCZXM6rr8/0=
 github.com/go-stomp/stomp/v3 v3.1.0/go.mod h1:ztzZej6T2W4Y6FlD+Tb5n7HQP3/O5UNQiuC169pIp10=
+github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1 h1:FWNFq4fM1wPfcK40yHE5UO3RUdSNPaBC+j3PokzA6OQ=
+github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1/go.mod h1:5YoVOkjYAQumqlV356Hj3xeYh4BdZuLE0/nRkf2NKkI=
 github.com/golang/mock v1.6.0/go.mod h1:p6yTPP+5HYm5mzsMV8JkE6ZKdX+/wYM6Hr+LicevLPs=
 github.com/gorilla/websocket v1.5.0 h1:PPwGk2jz7EePpoHN/+ClbZu8SPxiqlu12wZP/3sWmnc=
 github.com/gorilla/websocket v1.5.0/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
