@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"log"
+	"os"
 	"time"
 
 	"github.com/go-stomp/stomp/v3"
+	"github.com/gocarina/gocsv"
 
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
@@ -35,7 +37,26 @@ var itafmOptions []func(*stomp.Conn) error = []func(*stomp.Conn) error{
 	stomp.ConnOpt.HeartBeatError(360 * time.Second),
 }
 
+var airlines []*model.CSVAirline
+
 func StartConnectMQTT(a *App) {
+
+	in, err := os.Open("data/flight_airlinecode.csv")
+	if err != nil {
+		panic(err)
+	}
+	defer in.Close()
+
+	airlines = []*model.CSVAirline{}
+
+	if err := gocsv.UnmarshalFile(in, &airlines); err != nil {
+		panic(err)
+	}
+	for _, client := range airlines {
+		log.Println("Hello, ", client.Name)
+	}
+
+	return
 	for {
 		flag.Parse()
 		// subFlight := make(chan bool)
@@ -62,6 +83,24 @@ func StartConnectMQTT(a *App) {
 	}
 }
 
+// Change Flight number from ICAO to IATA
+// Such as THA616 to TG 616
+func ChangeFlightNumber(flightNumber string) (string, bool) {
+	if len(flightNumber) < 3 {
+		return flightNumber, false
+	}
+
+	icaoCode := flightNumber[:3]
+
+	for _, airline := range airlines {
+		if airline.ICAO == icaoCode {
+			return (airline.IATA + flightNumber[3:]), true
+		}
+	}
+
+	return flightNumber, false
+}
+
 func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 	defer func() {
 		stop <- true
@@ -83,7 +122,6 @@ func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 	}
 
 	log.Println("Connect to Surveillance")
-
 
 	for {
 		msg := <-sub.C

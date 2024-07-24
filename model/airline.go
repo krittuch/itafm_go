@@ -13,3 +13,12 @@ type Airline struct {
 	CallSign string `json:"call_sign"`
 	Country  string `json:"country"`
 }
+
+type CSVAirline struct {
+	Id       string `csv:"id"`
+	Name     string `csv:"name"`
+	IATA     string `csv:"iata"`
+	ICAO     string `csv:"icao"`
+	CallSign string `csv:"call_sign"`
+	Country  string `csv:"country"`
+}
