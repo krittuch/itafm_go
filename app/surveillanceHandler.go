@@ -29,22 +29,8 @@ func onSurveillanceReceive(msg *stomp.Message,
 		return
 	}
 
-	// // Change to IATA code
-	// airlineController := controller.NewAirlineController(db)
-	// if len(survData.CallSign) < 3 {
-	// 	return
-	// }
-	// icaoCode := survData.CallSign[:3]
-	// airline, err := airlineController.GetAirline(icaoCode)
-
-	// if err != nil {
-	// 	log.Println(err)
-	// 	return
-	// }
-
-	// survData.CallSign = airline.IATA + survData.CallSign[3:]
 	success := false
-	survData.CallSign, success = ChangeFlightNumber(survData.CallSign)
+	survData.CallSign, success = ConvertToIATA(survData.CallSign)
 
 	if !success {
 		log.Println("Cannot change flight number")
