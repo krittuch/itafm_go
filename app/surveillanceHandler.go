@@ -51,7 +51,7 @@ func onSurveillanceReceive(msg *stomp.Message,
 		return
 	}
 
-	surveillanceController.InsertOrUpdateSurveillance(&survData)
+	// surveillanceController.InsertOrUpdateSurveillance(&survData)
 
 	//Convert survData to string
 	survDataString, errMashal := json.Marshal(survData)

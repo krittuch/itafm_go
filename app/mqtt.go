@@ -83,6 +83,7 @@ func StartConnectMQTT(a *App) {
 // Such as THA616 to TG 616
 func ChangeFlightNumber(flightNumber string) (string, bool) {
 	if len(flightNumber) < 3 {
+		log.Println("Flight length lower than 3")
 		return flightNumber, false
 	}
 
@@ -93,6 +94,8 @@ func ChangeFlightNumber(flightNumber string) (string, bool) {
 			return (airline.IATA + flightNumber[3:]), true
 		}
 	}
+
+	log.Println("Cannot find ", icaoCode)
 
 	return flightNumber, false
 }
