@@ -56,7 +56,7 @@ func StartConnectMQTT(a *App) {
 	for {
 		flag.Parse()
 		// subFlight := make(chan bool)
-		// subIDEP := make(chan bool)
+		subIDEP := make(chan bool)
 		subSurv := make(chan bool)
 		conn, err := stomp.Dial("tcp", *serverAddr, options...)
 
@@ -68,7 +68,7 @@ func StartConnectMQTT(a *App) {
 		}
 
 		log.Println("Connected To AODS Server")
-		// go recvIDEPMessages(subIDEP, a.DB, conn)
+		go recvIDEPMessages(subIDEP, a.DB, conn)
 		// go recvFltMessages(subFlight, a.DB, conn)
 		go recvSurvMessages(subSurv, a.DB, conn)
 
@@ -81,7 +81,7 @@ func StartConnectMQTT(a *App) {
 
 // Change Flight number from ICAO to IATA
 // Such as THA616 to TG 616
-func ChangeFlightNumber(flightNumber string) (string, bool) {
+func ConvertToIATA(flightNumber string) (string, bool) {
 	if len(flightNumber) < 3 {
 		log.Println("Flight length lower than 3")
 		return flightNumber, false
@@ -159,6 +159,11 @@ func recvIDEPMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 
 	for {
 		msg := <-sub.C
+
+		if msg.Err != nil {
+			log.Println(msg.Err)
+			continue
+		}
 
 		if len(msg.Body) <= 0 {
 			log.Println(msg.Body)

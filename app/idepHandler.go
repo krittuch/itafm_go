@@ -32,14 +32,13 @@ func onIDEPReceive(
 		Bay: &data.DepartureParkingStand,
 	}
 
-	airlineController := controller.NewAirlineController(db)
-
 	airlineCodeRegex := regexp.MustCompile(`^[A-Z]{3}`)
 	icaoCode := airlineCodeRegex.FindString(data.AircraftID)
 
-	airline, errAirline := airlineController.GetAirline(icaoCode)
+	iata, success := ConvertToIATA(icaoCode)
 
-	if errAirline != nil {
+	if !success {
+		log.Println("Cannot change flight number")
 		return
 	}
 
@@ -52,7 +51,7 @@ func onIDEPReceive(
 	}
 	flightNumber := strings.TrimLeft(matchString, "0")
 
-	patchFlight.FlightNumber = fmt.Sprint(airline.IATA, " ", flightNumber)
+	patchFlight.FlightNumber = fmt.Sprint(iata, " ", flightNumber)
 
 	flightController.UpdateBay(patchFlight.FlightNumber, data.EOBT, *patchFlight.Bay)
 
