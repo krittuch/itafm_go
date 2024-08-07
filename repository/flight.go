@@ -152,7 +152,9 @@ func (f *FlightRepository) UpdateDepartureFlight(flightNumber string, date strin
 
 func (f *FlightRepository) UpdateBay(flightNumber string, std string, bay string) error {
 	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET bay=$1 
-	WHERE flight_number = $2 and schedule_flight_time >= $3`)
+	WHERE flight_number = $2 and 
+	schedule_flight_time >= CURRENT_DATE and 
+	schedule_flight_time <= CURRENT_DATE + INTERVAL '1 day'`)
 
 	if err != nil {
 		return err
