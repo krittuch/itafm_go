@@ -69,3 +69,14 @@ func (f *FlightController) UpdateBay(flightNumber string, std string, bay string
 		log.Println(err)
 	}
 }
+
+
+func (f *FlightController) UpdateTOBT(flightNumber string, tobt string) {
+	repo := repository.NewFlightRepository(f.DB)
+
+	err := repo.UpdateTOBTFlight(flightNumber, tobt)
+
+	if err != nil {
+		log.Println(err)
+	}
+}

@@ -15,3 +15,4 @@ ITAFM_MQTT_USER=aods_gw
 ITAFM_MQTT_PASS=aods_gw
 
 ITAFM_SURV_TOPIC=client/as62
+ITAFM_FLTH_TOPIC=server/trigger/flight/

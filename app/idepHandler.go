@@ -53,6 +53,18 @@ func onIDEPReceive(
 
 	patchFlight.FlightNumber = fmt.Sprint(iata, " ", flightNumber)
 
-	flightController.UpdateBay(patchFlight.FlightNumber, data.EOBT, *patchFlight.Bay)
+	if *patchFlight.Bay != "" {
+		flightController.UpdateBay(patchFlight.FlightNumber, data.EOBT, *patchFlight.Bay)
+		sendToITAFM(client, fmt.Println("server/trigger/flight/", patchFlight.FlightNumber), "")
+	}
+
+	if data.TOBT != "" {
+		flightController.UpdateTOBT(patchFlight.FlightNumer, data.TOBT)
+		log.Println("Success update TOBT")
+		sendToITAFM(client, fmt.Println("server/trigger/flight/", patchFlight.FlightNumber), "")
+	}
+	
+
+	
 
 }

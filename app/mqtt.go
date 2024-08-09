@@ -21,6 +21,7 @@ var topicFLMOName = flag.String("flmtopic", MQTT_FLIGHT_MOVEMENT_TOPIC, "FLMO To
 var topicIDEPName = flag.String("ideptopic", MQTT_IDEP_TOPIC, "IDEP Topic")
 var topicSURVName = flag.String("survtopic", MQTT_SURV_TOPIC, "SURV Topic")
 var itafmSurvTopicName = flag.String("itafmsurvtopic", ITAFM_SURV_TOPIC, "SURV Topic")
+var itafmFlightTopicName = flag.String("itafmflighttopic", ITAFM_SURV_TOPIC, "SURV Topic")
 var stop = make(chan bool)
 
 var options []func(*stomp.Conn) error = []func(*stomp.Conn) error{

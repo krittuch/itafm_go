@@ -10,4 +10,5 @@ type FlightInterface interface {
 	UpdateFlight(*model.PatchFlight) (*model.Flight, error)
 	UpdateDepartureFlight(string, string, string) error
 	UpdateBay(string, string, string) error
+	UpdateTOBTFlight(string, string) error
 }
