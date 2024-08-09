@@ -155,6 +155,14 @@ func recvIDEPMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 		return
 	}
 
+	// Create connection to itafm mqtt
+	client := initITAFM()
+
+	if token := client.Connect(); token.Wait() && token.Error() != nil {
+		log.Println(token.Error())
+		return
+	}
+
 	log.Println("Connect To iDEP")
 	flightController := controller.NewFlightController(db)
 
@@ -172,7 +180,7 @@ func recvIDEPMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 			continue
 		}
 
-		onIDEPReceive(msg, db, flightController)
+		onIDEPReceive(msg, db, flightController, client)
 
 	}
 

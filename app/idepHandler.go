@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/go-stomp/stomp/v3"
 )
 
@@ -18,7 +19,8 @@ import (
 func onIDEPReceive(
 	msg *stomp.Message,
 	db *sql.DB,
-	flightController *controller.FlightController) {
+	flightController *controller.FlightController,
+	client mqtt.Client) {
 	// Simulate receiving message
 
 	data := model.IDEP{}
@@ -55,13 +57,13 @@ func onIDEPReceive(
 
 	if *patchFlight.Bay != "" {
 		flightController.UpdateBay(patchFlight.FlightNumber, data.EOBT, *patchFlight.Bay)
-		sendToITAFM(client, fmt.Println("server/trigger/flight/", patchFlight.FlightNumber), "")
+		sendToITAFM(client, "server/trigger/flight/" + patchFlight.FlightNumber, "")
 	}
 
 	if data.TOBT != "" {
-		flightController.UpdateTOBT(patchFlight.FlightNumer, data.TOBT)
-		log.Println("Success update TOBT")
-		sendToITAFM(client, fmt.Println("server/trigger/flight/", patchFlight.FlightNumber), "")
+		flightController.UpdateTOBT(patchFlight.FlightNumber, data.TOBT)
+		log.Println("Success update TOBT" + patchFlight.FlightNumber)
+		sendToITAFM(client, "server/trigger/flight/" + patchFlight.FlightNumber, "")
 	}
 	
 
