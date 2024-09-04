@@ -14,6 +14,7 @@ type FlightControllerInterface interface {
 	UpdateFlight(*model.PatchFlight) error
 	UpdateBay(string, string, string)
 	UpdateDepartureFlight(string, string, string)
+	UpdateCallsign( string,  string)
 }
 
 type FlightController struct {
@@ -75,6 +76,16 @@ func (f *FlightController) UpdateTOBT(flightNumber string, tobt string) {
 	repo := repository.NewFlightRepository(f.DB)
 
 	err := repo.UpdateTOBTFlight(flightNumber, tobt)
+
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func (f *FlightController) UpdateCallsign(callsign string, tobt string) {
+	repo := repository.NewFlightRepository(f.DB)
+
+	err := repo.UpdateCallsign(callsign, tobt)
 
 	if err != nil {
 		log.Println(err)

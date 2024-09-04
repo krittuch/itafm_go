@@ -10,9 +10,12 @@ import (
 
 	"github.com/go-stomp/stomp/v3"
 	"github.com/gocarina/gocsv"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
+
+
 )
 
 var serverAddr = flag.String("server", MQTT_IP_ADDRESS+":"+MQTT_PORT, "AODS server endpoint")
@@ -27,15 +30,9 @@ var stop = make(chan bool)
 var options []func(*stomp.Conn) error = []func(*stomp.Conn) error{
 	stomp.ConnOpt.Login(MQTT_USER, MQTT_PASSWORD),
 	stomp.ConnOpt.Host("/"),
-	stomp.ConnOpt.HeartBeat(30, 30),
+	stomp.ConnOpt.HeartBeat(120, 120),
 	stomp.ConnOpt.HeartBeatError(360 * time.Second),
-}
-
-var itafmOptions []func(*stomp.Conn) error = []func(*stomp.Conn) error{
-	stomp.ConnOpt.Login(ITAFM_MQTT_USER, ITAFM_MQTT_PASSWORD),
-	stomp.ConnOpt.Host("/"),
-	stomp.ConnOpt.HeartBeat(30, 30),
-	stomp.ConnOpt.HeartBeatError(360 * time.Second),
+	// stomp.ConnOpt.RcvReceiptTimeout(360 * time.Second),
 }
 
 var airlines []*model.CSVAirline
@@ -54,31 +51,52 @@ func StartConnectMQTT(a *App) {
 		panic(err)
 	}
 
-	for {
 		flag.Parse()
 		// subFlight := make(chan bool)
-		subIDEP := make(chan bool)
-		subSurv := make(chan bool)
-		conn, err := stomp.Dial("tcp", *serverAddr, options...)
+		
 
-		if err != nil {
-			log.Println("Failed to connect to MQTT server:", err)
-			log.Println("Attempting to reconnect in 5 minutes...")
-			time.Sleep(5 * time.Minute)
-			continue
+		// subscribe := make
+		
+
+		// Create connection to itafm mqtt
+		client := initITAFM()
+
+		if token := client.Connect(); token.Wait() && token.Error() != nil {
+			log.Println(token.Error())
+			return
 		}
 
 		log.Println("Connected To AODS Server")
-		go recvIDEPMessages(subIDEP, a.DB, conn)
-		// go recvFltMessages(subFlight, a.DB, conn)
-		go recvSurvMessages(subSurv, a.DB, conn)
+		
+		// go recvFltMessages(subFlight, a.DB, client)
+		connectToSurveillance(a.DB, client)
+		connectToIDEP(a.DB, client)
+		connectToFLT(a.DB, client)
 
 		// Listen for a stop signal to break the loop and end the function
+
+		select {}
 		<-stop
 		log.Println("Stop MQTT Message")
-		return
-	}
+		
+
 }
+
+func connectToSurveillance (db *sql.DB, client mqtt.Client) {
+	subSurv := make(chan bool)
+	go recvSurvMessages(subSurv, db, client)
+}
+
+func connectToIDEP (db *sql.DB, client mqtt.Client) {
+	subIDEP := make(chan bool)
+	go recvIDEPMessages(subIDEP, db, client)
+}
+
+func connectToFLT(db *sql.DB, client mqtt.Client) {
+	subFlight := make(chan bool)
+	go recvFltMessages(subFlight, db, client)
+}
+
 
 // Change Flight number from ICAO to IATA
 // Such as THA616 to TG 616
@@ -101,10 +119,17 @@ func ConvertToIATA(flightNumber string) (string, bool) {
 	return flightNumber, false
 }
 
-func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
+func recvSurvMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 	defer func() {
 		stop <- true
 	}()
+
+	conn, err := stomp.Dial("tcp", *serverAddr, options...)
+
+	if err != nil {
+		println("cannot connect to server", err.Error())
+		return
+	}
 
 	sub, err := conn.Subscribe(*topicSURVName, stomp.AckAuto)
 
@@ -113,27 +138,28 @@ func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 		return
 	}
 
-	// Create connection to itafm mqtt
-	client := initITAFM()
-
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		log.Println(token.Error())
-		return
-	}
-
 	log.Println("Connect to Surveillance")
 
 	for {
+
 		msg := <-sub.C
 
-		if msg.Err != nil {
-			log.Println(msg.Err)
+		if msg == nil {
 			continue
 		}
 
 		if len(msg.Body) <= 0 {
 			log.Println(msg.Body)
 			log.Println("Message is Empty")
+			conn.Disconnect()
+			connectToSurveillance(db, client)
+			return
+		}
+
+		if msg.Err != nil {
+			log.Println("Message Error from Surveillance")
+			log.Println(msg.Err)
+			
 			continue
 		}
 
@@ -143,10 +169,17 @@ func recvSurvMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 	}
 }
 
-func recvIDEPMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
+func recvIDEPMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 	defer func() {
 		stop <- true
 	}()
+
+	conn, err := stomp.Dial("tcp", *serverAddr, options...)
+
+	if err != nil {
+		println("cannot connect to server", err.Error())
+		return
+	}
 
 	sub, err := conn.Subscribe(*topicIDEPName, stomp.AckAuto)
 
@@ -155,28 +188,27 @@ func recvIDEPMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 		return
 	}
 
-	// Create connection to itafm mqtt
-	client := initITAFM()
-
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		log.Println(token.Error())
-		return
-	}
-
 	log.Println("Connect To iDEP")
 	flightController := controller.NewFlightController(db)
 
 	for {
 		msg := <-sub.C
-
-		if msg.Err != nil {
-			log.Println(msg.Err)
+		
+		if msg == nil {
 			continue
 		}
 
 		if len(msg.Body) <= 0 {
 			log.Println(msg.Body)
 			log.Println("Message is Empty")
+			conn.Disconnect()
+			connectToIDEP(db, client)
+			return
+		}
+
+		if msg.Err != nil {
+			log.Println("Message Error from IDEP")
+			log.Println(msg.Err)
 			continue
 		}
 
@@ -186,10 +218,17 @@ func recvIDEPMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 
 }
 
-func recvFltMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
+func recvFltMessages(_ chan bool, db *sql.DB,  client mqtt.Client) {
 	defer func() {
 		stop <- true
 	}()
+
+	conn, err := stomp.Dial("tcp", *serverAddr, options...)
+
+	if err != nil {
+		println("cannot connect to server", err.Error())
+		return
+	}
 
 	sub, err := conn.Subscribe(*topicFLMOName, stomp.AckAuto)
 	if err != nil {
@@ -202,9 +241,21 @@ func recvFltMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 	for {
 		msg := <-sub.C
 
+		if msg == nil {
+			continue
+		}
+
 		if len(msg.Body) <= 0 {
 			log.Println(msg.Body)
 			log.Println("Message is Empty")
+			conn.Disconnect()
+			connectToFLT(db, client)
+			return
+		}
+
+		if msg.Err != nil {
+			log.Println("Message Error from FLT Plan")
+			log.Println(msg.Err)
 			continue
 		}
 
@@ -219,13 +270,14 @@ func recvFltMessages(_ chan bool, db *sql.DB, conn *stomp.Conn) {
 		}
 
 		if data.CMD == "FPL" {
-			onFPLReceive(msg, db, flightController)
-		} else if data.CMD == "DEP" || data.CMD == "ARR" {
-			onCMDReceive(msg, db, flightController)
-		} else if data.CMD == "CNL" {
-			onCNLReceive(msg, db, flightController)
-		} else if data.CMD == "DLY" {
-			onDLYReceive(msg, db, flightController)
-		}
+			onFPLReceive(msg, db, flightController, client)
+		} 
+		// else if data.CMD == "DEP" || data.CMD == "ARR" {
+		// 	onCMDReceive(msg, db, flightController)
+		// } else if data.CMD == "CNL" {
+		// 	onCNLReceive(msg, db, flightController)
+		// } else if data.CMD == "DLY" {
+		// 	onDLYReceive(msg, db, flightController)
+		// }
 	}
 }

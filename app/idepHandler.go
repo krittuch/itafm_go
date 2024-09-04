@@ -62,11 +62,8 @@ func onIDEPReceive(
 
 	if data.TOBT != "" {
 		flightController.UpdateTOBT(patchFlight.FlightNumber, data.TOBT)
-		log.Println("Success update TOBT" + patchFlight.FlightNumber)
+		// log.Println("Success update TOBT" + patchFlight.FlightNumber)
 		sendToITAFM(client, "server/trigger/flight/" + patchFlight.FlightNumber, "")
 	}
-	
-
-	
 
 }

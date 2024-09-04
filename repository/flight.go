@@ -152,8 +152,11 @@ func (f *FlightRepository) UpdateDepartureFlight(flightNumber string, date strin
 
 func (f *FlightRepository) UpdateTOBTFlight(flightNumber string, datetime string) error {
 
+	datetime = datetime + "+00"
+
 	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET estimate_flight_time=$1 
 	WHERE flight_number = $2 and 
+	type = 'DEP' and
 	schedule_flight_time >= CURRENT_DATE and 
 	schedule_flight_time <= CURRENT_DATE + INTERVAL '1 day'`)
 
@@ -185,6 +188,29 @@ func (f *FlightRepository) UpdateBay(flightNumber string, std string, bay string
 	defer stmt.Close()
 
 	_, err2 := stmt.Exec(bay, flightNumber)
+
+	if err2 != nil {
+		return err2
+	}
+
+	return nil
+}
+
+
+func (f *FlightRepository) UpdateCallsign(flightNumber string, register string) error {
+	stmt, err := f.DB.Prepare(`UPDATE public.flight_flight SET 
+		ac_register = $1
+		where flight_number = $2 and
+		schedule_flight_time >= CURRENT_DATE and 
+		schedule_flight_time <= CURRENT_DATE + INTERVAL '1 day'`)
+
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	_, err2 := stmt.Exec(register, flightNumber)
 
 	if err2 != nil {
 		return err2

@@ -11,4 +11,5 @@ type FlightInterface interface {
 	UpdateDepartureFlight(string, string, string) error
 	UpdateBay(string, string, string) error
 	UpdateTOBTFlight(string, string) error
+	UpdateCallsign(string, string) error
 }
