@@ -1,0 +1,14 @@
+version: "3"
+
+services:
+  gateway:
+    container_name: itafm_aods_gw_prod
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: always
+    env_file:
+      - ./.envs/.production/.postgres
+      - ./.envs/.production/.mqtt
+    volumes:
+      - .:/usr/src/app/
+    network_mode: host
