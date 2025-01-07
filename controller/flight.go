@@ -9,12 +9,12 @@ import (
 )
 
 type FlightControllerInterface interface {
-	GetFlight(string, string) model.Flight
+	GetFlight(string, string) (model.Flight, error)
 	InsertFlight(*model.PostFlight)
 	UpdateFlight(*model.PatchFlight) error
 	UpdateBay(string, string, string)
 	UpdateDepartureFlight(string, string, string)
-	UpdateCallsign( string,  string)
+	UpdateRegister( string,  string, string)
 }
 
 type FlightController struct {
@@ -82,10 +82,10 @@ func (f *FlightController) UpdateTOBT(flightNumber string, tobt string) {
 	}
 }
 
-func (f *FlightController) UpdateCallsign(callsign string, tobt string) {
+func (f *FlightController) UpdateRegister(callsign string, tobt string, std string) {
 	repo := repository.NewFlightRepository(f.DB)
 
-	err := repo.UpdateCallsign(callsign, tobt)
+	err := repo.UpdateRegister(callsign, tobt, std)
 
 	if err != nil {
 		log.Println(err)

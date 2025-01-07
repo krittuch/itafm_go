@@ -29,7 +29,7 @@ func (f *FlightRepository) GetFlight(fn string, std string) (model.Flight, error
 	err := f.DB.QueryRow(`
 	SELECT id, flight_number, schedule_flight_time
 	FROM flight_flight
-	WHERE flight_number = $1, schedule_flight_time = $2`,
+	WHERE flight_number = $1 and schedule_flight_time = $2`,
 		fn, std).Scan(
 		&id,
 		&flightNumber,
@@ -197,12 +197,11 @@ func (f *FlightRepository) UpdateBay(flightNumber string, std string, bay string
 }
 
 
-func (f *FlightRepository) UpdateCallsign(flightNumber string, register string) error {
+func (f *FlightRepository) UpdateRegister(flightNumber string, register string, std string) error {
 	stmt, err := f.DB.Prepare(`UPDATE public.flight_flight SET 
 		ac_register = $1
 		where flight_number = $2 and
-		schedule_flight_time >= CURRENT_DATE and 
-		schedule_flight_time <= CURRENT_DATE + INTERVAL '1 day'`)
+		schedule_flight_time = $3`)
 
 	if err != nil {
 		return err
@@ -210,7 +209,7 @@ func (f *FlightRepository) UpdateCallsign(flightNumber string, register string) 
 
 	defer stmt.Close()
 
-	_, err2 := stmt.Exec(register, flightNumber)
+	_, err2 := stmt.Exec(register, flightNumber, std)
 
 	if err2 != nil {
 		return err2

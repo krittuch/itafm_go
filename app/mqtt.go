@@ -6,7 +6,6 @@ import (
 	"flag"
 	"log"
 	"os"
-	"time"
 
 	"github.com/go-stomp/stomp/v3"
 	"github.com/gocarina/gocsv"
@@ -30,8 +29,8 @@ var stop = make(chan bool)
 var options []func(*stomp.Conn) error = []func(*stomp.Conn) error{
 	stomp.ConnOpt.Login(MQTT_USER, MQTT_PASSWORD),
 	stomp.ConnOpt.Host("/"),
-	stomp.ConnOpt.HeartBeat(120, 120),
-	stomp.ConnOpt.HeartBeatError(360 * time.Second),
+	// stomp.ConnOpt.HeartBeat(60*time.Second, 60*time.Second),
+	// stomp.ConnOpt.HeartBeatError(360 * time.Second),
 	// stomp.ConnOpt.RcvReceiptTimeout(360 * time.Second),
 }
 
@@ -85,6 +84,7 @@ func StartConnectMQTT(a *App) {
 func connectToSurveillance (db *sql.DB, client mqtt.Client) {
 	subSurv := make(chan bool)
 	go recvSurvMessages(subSurv, db, client)
+	// <-subSurv
 }
 
 func connectToIDEP (db *sql.DB, client mqtt.Client) {
@@ -236,6 +236,7 @@ func recvFltMessages(_ chan bool, db *sql.DB,  client mqtt.Client) {
 		return
 	}
 
+	log.Println("Connect To Flight Movement")
 	flightController := controller.NewFlightController(db)
 
 	for {
@@ -271,13 +272,12 @@ func recvFltMessages(_ chan bool, db *sql.DB,  client mqtt.Client) {
 
 		if data.CMD == "FPL" {
 			onFPLReceive(msg, db, flightController, client)
-		} 
-		// else if data.CMD == "DEP" || data.CMD == "ARR" {
-		// 	onCMDReceive(msg, db, flightController)
-		// } else if data.CMD == "CNL" {
-		// 	onCNLReceive(msg, db, flightController)
-		// } else if data.CMD == "DLY" {
-		// 	onDLYReceive(msg, db, flightController)
-		// }
+		} else if data.CMD == "DEP" || data.CMD == "ARR" {
+			onCMDReceive(msg, db, flightController)
+		} else if data.CMD == "CNL" {
+			onCNLReceive(msg, db, flightController)
+		} else if data.CMD == "DLY" {
+			onDLYReceive(msg, db, flightController)
+		}
 	}
 }
