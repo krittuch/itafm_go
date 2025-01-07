@@ -6,7 +6,7 @@ import (
 
 type Flight struct {
 	ID                 int        `json:"id"`
-	Aircraft           string     `json:"ac_register"`
+	ACRegister           string     `json:"ac_register"`
 	ActualFlightTime   *time.Time `json:"actual_flight_time"`
 	AircraftType       string     `json:"aircraft"`
 	Bay                string     `json:"bay"`

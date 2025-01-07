@@ -76,9 +76,35 @@ func onFPLReceive(
 
 	flightNumber := strings.TrimLeft(matchString, "0")
 
+	timeStr := fplData.ETD
+
+	dateOfFlight := "20" + fplData.DOF[:2] + "-" + fplData.DOF[2:4] + "-" + fplData.DOF[4:]
+	std := strings.Join([]string{dateOfFlight, " ", timeStr[:2], ":", timeStr[2:4], ":00+00"}, "")
+
 	postFlight.FlightNumber = fmt.Sprint(iata, " ", flightNumber)
 
-	flightController.UpdateCallsign(postFlight.FlightNumber, postFlight.Register)
+	flightController.UpdateRegister(postFlight.FlightNumber, postFlight.Register, std)
+
+	flight, err := flightController.GetFlight(postFlight.FlightNumber, std)
+
+	if err != nil {
+		log.Println("Cannot find flight : ", postFlight.FlightNumber, std, err)
+	} else {
+
+		flightChangeLogController := controller.NewFlightChangeLogController(db)
+
+		err = flightChangeLogController.Insert(model.PostFlightChangeLog{
+			FlightID: uint(flight.ID),
+			Field:    "ac_register",
+			OldValue: flight.ACRegister,
+			NewValue: postFlight.Register,
+		})
+
+		if err != nil {
+			log.Println("FlightCon Insert error of Flight log ac_register change: ", flight.ID, flight.ScheduleFlightTime, err)
+		}
+	}
+
 	sendToITAFM(client, "server/trigger/flight/" + postFlight.FlightNumber, "")
 
 }
@@ -113,6 +139,7 @@ func onCMDReceive(
 	// Create ATD
 	dateOfFlight := ""
 	timeStr := ""
+	std := ""
 
 	if fmvData.CMD == "DEP" {
 		timeStr = fmvData.TIME1
@@ -122,7 +149,7 @@ func onCMDReceive(
 			return
 		}
 		dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
-		dateOfFlight = strings.Join([]string{dateOfFlight, " ", timeStr[:2], ":", timeStr[2:4], ":00+00"}, "")
+		std = strings.Join([]string{dateOfFlight, " ", timeStr[:2], ":", timeStr[2:4], ":00+00"}, "")
 	} else if fmvData.CMD == "ARR" {
 		timeStr = fmvData.TIME2
 		t := time.Now()
@@ -130,7 +157,7 @@ func onCMDReceive(
 		dString := strings.Split(timeString, " ")[0]
 
 		fmvData.DOF = dString
-		dateOfFlight = strings.Join([]string{
+		std = strings.Join([]string{
 			dString, " ",
 			timeStr[:2], ":",
 			timeStr[2:4], ":00+00",
@@ -139,7 +166,7 @@ func onCMDReceive(
 		return
 	}
 
-	flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, dateOfFlight)
+	flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, std)
 }
 
 func onCNLReceive(
