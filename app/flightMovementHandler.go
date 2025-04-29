@@ -112,7 +112,8 @@ func onFPLReceive(
 func onCMDReceive(
 	msg *stomp.Message,
 	db *sql.DB,
-	flightController *controller.FlightController) {
+	flightController *controller.FlightController,
+	client mqtt.Client) {
 	fmvData := model.AODSFlightMovement{}
 	err := json.Unmarshal(msg.Body, &fmvData)
 	if err != nil {
@@ -167,6 +168,8 @@ func onCMDReceive(
 	}
 
 	flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, std)
+
+	sendToITAFM(client, "server/trigger/flight/" + postFlight.FlightNumber, "")
 }
 
 func onCNLReceive(
