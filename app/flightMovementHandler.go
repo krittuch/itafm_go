@@ -169,7 +169,7 @@ func onCMDReceive(
 
 	flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, std)
 
-	sendToITAFM(client, "server/trigger/flight/" + postFlight.FlightNumber, "")
+	sendToITAFM(client, "server/trigger/flight/" + flightNumber, "")
 }
 
 func onCNLReceive(

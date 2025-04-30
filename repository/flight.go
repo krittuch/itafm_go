@@ -161,6 +161,7 @@ func (f *FlightRepository) UpdateTOBTFlight(flightNumber string, datetime string
 	schedule_flight_time <= CURRENT_DATE + INTERVAL '1 day'`)
 
 	if err != nil {
+		// log.Println(err)
 		return err
 	}
 
@@ -169,6 +170,7 @@ func (f *FlightRepository) UpdateTOBTFlight(flightNumber string, datetime string
 	_, err2 := stmt.Exec(datetime, flightNumber)
 
 	if err2 != nil {
+		// log.Println(err2)
 		return err2
 	}
 
