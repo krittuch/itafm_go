@@ -13,3 +13,9 @@ services:
     volumes:
       - .:/usr/src/app/
     network_mode: host
+#     networks:
+#       - agos_dj_agos_server_network
+
+# networks:
+#   agos_dj_agos_server_network:
+#     external: true
