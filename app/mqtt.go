@@ -273,7 +273,7 @@ func recvFltMessages(_ chan bool, db *sql.DB,  client mqtt.Client) {
 		if data.CMD == "FPL" {
 			onFPLReceive(msg, db, flightController, client)
 		} else if data.CMD == "DEP" || data.CMD == "ARR" {
-			onCMDReceive(msg, db, flightController)
+			onCMDReceive(msg, db, flightController, client)
 		} else if data.CMD == "CNL" {
 			onCNLReceive(msg, db, flightController)
 		} else if data.CMD == "DLY" {

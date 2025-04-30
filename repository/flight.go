@@ -154,13 +154,14 @@ func (f *FlightRepository) UpdateTOBTFlight(flightNumber string, datetime string
 
 	datetime = datetime + "+00"
 
-	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET estimate_flight_time=$1 
+	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET tobt=$1 
 	WHERE flight_number = $2 and 
 	type = 'DEP' and
 	schedule_flight_time >= CURRENT_DATE and 
 	schedule_flight_time <= CURRENT_DATE + INTERVAL '1 day'`)
 
 	if err != nil {
+		// log.Println(err)
 		return err
 	}
 
@@ -169,6 +170,7 @@ func (f *FlightRepository) UpdateTOBTFlight(flightNumber string, datetime string
 	_, err2 := stmt.Exec(datetime, flightNumber)
 
 	if err2 != nil {
+		// log.Println(err2)
 		return err2
 	}
 
