@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-stomp/stomp/v3"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/go-stomp/stomp/v3"
 
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
@@ -105,7 +105,7 @@ func onFPLReceive(
 		}
 	}
 
-	sendToITAFM(client, "server/trigger/flight/" + postFlight.FlightNumber, "")
+	sendToITAFM(client, "server/trigger/flight/"+postFlight.FlightNumber, "")
 
 }
 
@@ -167,9 +167,13 @@ func onCMDReceive(
 		return
 	}
 
-	flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, std)
+	if fmvData.CMD == "DEP" {
+		flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, std)
+	} else if fmvData.CMD == "ARR" {
+		flightController.UpdateArrivalFlight(flightNumber, fmvData.DOF, std)
+	}
 
-	sendToITAFM(client, "server/trigger/flight/" + flightNumber, "")
+	sendToITAFM(client, "server/trigger/flight/"+flightNumber, "")
 }
 
 func onCNLReceive(
