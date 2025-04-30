@@ -14,7 +14,8 @@ type FlightControllerInterface interface {
 	UpdateFlight(*model.PatchFlight) error
 	UpdateBay(string, string, string)
 	UpdateDepartureFlight(string, string, string)
-	UpdateRegister( string,  string, string)
+	UpdateArrivalFlight(string, string, string)
+	UpdateRegister(string, string, string)
 }
 
 type FlightController struct {
@@ -61,6 +62,16 @@ func (f *FlightController) UpdateDepartureFlight(flightNumber string, date strin
 	}
 }
 
+func (f *FlightController) UpdateArrivalFlight(flightNumber string, date string, datetime string) {
+	repo := repository.NewFlightRepository(f.DB)
+
+	err := repo.UpdateDepartureFlight(flightNumber, date, datetime)
+
+	if err != nil {
+		log.Println(err)
+	}
+}
+
 func (f *FlightController) UpdateBay(flightNumber string, std string, bay string) {
 	repo := repository.NewFlightRepository(f.DB)
 
@@ -70,7 +81,6 @@ func (f *FlightController) UpdateBay(flightNumber string, std string, bay string
 		log.Println(err)
 	}
 }
-
 
 func (f *FlightController) UpdateTOBT(flightNumber string, tobt string) {
 	repo := repository.NewFlightRepository(f.DB)
