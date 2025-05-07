@@ -9,6 +9,7 @@ type FlightInterface interface {
 	InsertFlight(*model.PostFlight)
 	UpdateFlight(*model.PatchFlight) (*model.Flight, error)
 	UpdateDepartureFlight(string, string, string) error
+	UpdateArrivalFlight(string, string, string) error
 	UpdateBay(string, string, string) error
 	UpdateTOBTFlight(string, string) error
 	UpdateRegister(string, string, string) error
