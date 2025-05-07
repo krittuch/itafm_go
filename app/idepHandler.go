@@ -60,12 +60,14 @@ func onIDEPReceive(
 		sendToITAFM(client, "server/trigger/flight/" + patchFlight.FlightNumber, "")
 	}
 
-	if data.TOBT != "0001-01-01 00:00:00" {
+	if !strings.Contains(data.TOBT, "0001-01-01") {
 		// log.Println(data.TOBT)
 		// log.Println(patchFlight.FlightNumber)
 		flightController.UpdateTOBT(patchFlight.FlightNumber, data.TOBT)
 		// log.Println("Success update TOBT" + patchFlight.FlightNumber)
 		sendToITAFM(client, "server/trigger/flight/" + patchFlight.FlightNumber, "")
+	}else {
+		log.Println(data)
 	}
 
 	

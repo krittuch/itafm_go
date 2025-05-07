@@ -133,7 +133,7 @@ func (f *FlightRepository) InsertFlight(flight *model.PostFlight) error {
 func (f *FlightRepository) UpdateDepartureFlight(flightNumber string, date string, datetime string) error {
 
 	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET actual_flight_time=$1 
-	WHERE flight_number = $2 and type = 'DEP' and schedule_flight_time >= $3`)
+	WHERE flight_number = $2 and type = 'DEP' and schedule_flight_time = $3`)
 
 	if err != nil {
 		return err
@@ -153,7 +153,7 @@ func (f *FlightRepository) UpdateDepartureFlight(flightNumber string, date strin
 func (f *FlightRepository) UpdateArrivalFlight(flightNumber string, date string, datetime string) error {
 
 	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET actual_flight_time=$1 
-	WHERE flight_number = $2 and type = 'ARR' and schedule_flight_time >= $3`)
+	WHERE flight_number = $2 and type = 'ARR' and schedule_flight_time = $3`)
 
 	if err != nil {
 		return err

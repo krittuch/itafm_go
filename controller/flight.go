@@ -65,7 +65,7 @@ func (f *FlightController) UpdateDepartureFlight(flightNumber string, date strin
 func (f *FlightController) UpdateArrivalFlight(flightNumber string, date string, datetime string) {
 	repo := repository.NewFlightRepository(f.DB)
 
-	err := repo.UpdateDepartureFlight(flightNumber, date, datetime)
+	err := repo.UpdateArrivalFlight(flightNumber, date, datetime)
 
 	if err != nil {
 		log.Println(err)
