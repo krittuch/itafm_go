@@ -3,7 +3,6 @@ package repository
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"time"
 
 	"aerothai/itafm/model"
@@ -82,8 +81,6 @@ func (f *FlightRepository) UpdateFlight(flight *model.PatchFlight) error {
 	}
 
 	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET $1 WHERE id = $2`)
-
-	log.Println(qString)
 
 	if err != nil {
 		return err
@@ -181,7 +178,6 @@ func (f *FlightRepository) UpdateTOBTFlight(flightNumber string, datetime string
 	schedule_flight_time <= CURRENT_DATE + INTERVAL '1 day'`)
 
 	if err != nil {
-		// log.Println(err)
 		return err
 	}
 
@@ -190,7 +186,6 @@ func (f *FlightRepository) UpdateTOBTFlight(flightNumber string, datetime string
 	_, err2 := stmt.Exec(datetime, flightNumber)
 
 	if err2 != nil {
-		// log.Println(err2)
 		return err2
 	}
 

@@ -40,7 +40,6 @@ func onIDEPReceive(
 	iata, success := ConvertToIATA(icaoCode)
 
 	if !success {
-		log.Println("Cannot change flight number")
 		return
 	}
 
@@ -48,7 +47,6 @@ func onIDEPReceive(
 	numberRegex := regexp.MustCompile(`\d+`)
 	matchString := numberRegex.FindString(data.AircraftID)
 	if len(matchString) <= 0 {
-		log.Println("Cannot find number in ", data.AircraftID)
 		return
 	}
 	flightNumber := strings.TrimLeft(matchString, "0")
@@ -57,20 +55,12 @@ func onIDEPReceive(
 
 	if *patchFlight.Bay != "" {
 		flightController.UpdateBay(patchFlight.FlightNumber, data.EOBT, *patchFlight.Bay)
-		sendToITAFM(client, "server/trigger/flight/" + patchFlight.FlightNumber, "")
+		sendToITAFM(client, "server/trigger/flight/"+patchFlight.FlightNumber, "")
 	}
 
 	if !strings.Contains(data.TOBT, "0001-01-01") {
-		// log.Println(data.TOBT)
-		// log.Println(patchFlight.FlightNumber)
 		flightController.UpdateTOBT(patchFlight.FlightNumber, data.TOBT)
-		// log.Println("Success update TOBT" + patchFlight.FlightNumber)
-		sendToITAFM(client, "server/trigger/flight/" + patchFlight.FlightNumber, "")
-	}else {
-		log.Println(data)
+		sendToITAFM(client, "server/trigger/flight/"+patchFlight.FlightNumber, "")
 	}
-
-	
-	// log.Println(data)
 
 }

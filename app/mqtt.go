@@ -7,14 +7,12 @@ import (
 	"log"
 	"os"
 
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/go-stomp/stomp/v3"
 	"github.com/gocarina/gocsv"
-	mqtt "github.com/eclipse/paho.mqtt.golang"
 
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
-
-
 )
 
 var serverAddr = flag.String("server", MQTT_IP_ADDRESS+":"+MQTT_PORT, "AODS server endpoint")
@@ -50,44 +48,41 @@ func StartConnectMQTT(a *App) {
 		panic(err)
 	}
 
-		flag.Parse()
-		// subFlight := make(chan bool)
-		
+	flag.Parse()
+	// subFlight := make(chan bool)
 
-		// subscribe := make
-		
+	// subscribe := make
 
-		// Create connection to itafm mqtt
-		client := initITAFM()
+	// Create connection to itafm mqtt
+	client := initITAFM()
 
-		if token := client.Connect(); token.Wait() && token.Error() != nil {
-			log.Println(token.Error())
-			return
-		}
+	if token := client.Connect(); token.Wait() && token.Error() != nil {
+		log.Println(token.Error())
+		return
+	}
 
-		log.Println("Connected To AODS Server")
-		
-		// go recvFltMessages(subFlight, a.DB, client)
-		connectToSurveillance(a.DB, client)
-		connectToIDEP(a.DB, client)
-		connectToFLT(a.DB, client)
+	log.Println("Connected To AODS Server")
 
-		// Listen for a stop signal to break the loop and end the function
+	// go recvFltMessages(subFlight, a.DB, client)
+	connectToSurveillance(a.DB, client)
+	connectToIDEP(a.DB, client)
+	connectToFLT(a.DB, client)
 
-		select {}
-		<-stop
-		log.Println("Stop MQTT Message")
-		
+	// Listen for a stop signal to break the loop and end the function
+
+	select {}
+	<-stop
+	log.Println("Stop MQTT Message")
 
 }
 
-func connectToSurveillance (db *sql.DB, client mqtt.Client) {
+func connectToSurveillance(db *sql.DB, client mqtt.Client) {
 	subSurv := make(chan bool)
 	go recvSurvMessages(subSurv, db, client)
 	// <-subSurv
 }
 
-func connectToIDEP (db *sql.DB, client mqtt.Client) {
+func connectToIDEP(db *sql.DB, client mqtt.Client) {
 	subIDEP := make(chan bool)
 	go recvIDEPMessages(subIDEP, db, client)
 }
@@ -97,12 +92,10 @@ func connectToFLT(db *sql.DB, client mqtt.Client) {
 	go recvFltMessages(subFlight, db, client)
 }
 
-
 // Change Flight number from ICAO to IATA
 // Such as THA616 to TG 616
 func ConvertToIATA(flightNumber string) (string, bool) {
 	if len(flightNumber) < 3 {
-		log.Println("Flight length lower than 3")
 		return flightNumber, false
 	}
 
@@ -113,8 +106,6 @@ func ConvertToIATA(flightNumber string) (string, bool) {
 			return (airline.IATA + flightNumber[3:]), true
 		}
 	}
-
-	log.Println("Cannot find ", icaoCode)
 
 	return flightNumber, false
 }
@@ -159,7 +150,7 @@ func recvSurvMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 		if msg.Err != nil {
 			log.Println("Message Error from Surveillance")
 			log.Println(msg.Err)
-			
+
 			continue
 		}
 
@@ -193,7 +184,7 @@ func recvIDEPMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 
 	for {
 		msg := <-sub.C
-		
+
 		if msg == nil {
 			continue
 		}
@@ -218,7 +209,7 @@ func recvIDEPMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 
 }
 
-func recvFltMessages(_ chan bool, db *sql.DB,  client mqtt.Client) {
+func recvFltMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 	defer func() {
 		stop <- true
 	}()
@@ -266,7 +257,6 @@ func recvFltMessages(_ chan bool, db *sql.DB,  client mqtt.Client) {
 		if err != nil {
 			log.Println("Erro  on Flight Movement mqtt")
 			log.Println(err)
-			log.Println(string(msg.Body))
 			continue
 		}
 
