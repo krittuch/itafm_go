@@ -33,7 +33,6 @@ func onSurveillanceReceive(msg *stomp.Message,
 	survData.CallSign, success = ConvertToIATA(survData.CallSign)
 
 	if !success {
-		log.Println("Cannot change flight number")
 		return
 	}
 
