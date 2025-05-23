@@ -63,7 +63,6 @@ func onFPLReceive(
 	iata, success := ConvertToIATA(icaoCode)
 
 	if !success {
-		log.Println("Cannot change flight number")
 		return
 	}
 
