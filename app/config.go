@@ -3,10 +3,8 @@ package app
 import (
 	// "log"
 	"os"
-
 	// "github.com/joho/godotenv"
 )
-
 
 // func goDotEnvVariable(key string) string {
 
@@ -26,7 +24,7 @@ import (
 // 	HOSTDB  = goDotEnvVariable("DB_HOST")
 // 	DBNAME  = goDotEnvVariable("DB_NAME")
 // 	DBPORT  = goDotEnvVariable("DB_PORT")
-	
+
 // 	MQTT_IP_ADDRESS = goDotEnvVariable("MQTT_IP_ADDRESS")
 // 	MQTT_PORT       = goDotEnvVariable("MQTT_PORT")
 // 	MQTT_USER       = goDotEnvVariable("MQTT_USER")
@@ -45,7 +43,6 @@ import (
 // 	ITAFM_SURV_TOPIC = goDotEnvVariable("ITAFM_SURV_TOPIC")
 // 	ITAFM_FLTH_TOPIC = goDotEnvVariable("ITAFM_FLTH_TOPIC")
 // 	)
-	
 
 var (
 	UNAMEDB = os.Getenv("DB_USER")
@@ -62,6 +59,7 @@ var (
 	MQTT_FLIGHT_MOVEMENT_TOPIC = os.Getenv("MQTT_FLIGHT_MOVEMENT_TOPIC")
 	MQTT_FLIGHT_MOVEMENT_QUEUE = os.Getenv("MQTT_FLIGHT_MOVEMENT_QUEUE")
 	MQTT_IDEP_TOPIC            = os.Getenv("MQTT_IDEP_TOPIC")
+	MQTT_IDEP_QUEUE            = os.Getenv("MQTT_IDEP_QUEUE")
 	MQTT_SURV_TOPIC            = os.Getenv("MQTT_SURV_TOPIC")
 
 	ITAFM_MQTT_IP_ADDRESS = os.Getenv("ITAFM_MQTT_IP_ADDRESS")

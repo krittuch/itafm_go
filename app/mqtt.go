@@ -17,8 +17,12 @@ import (
 
 var serverAddr = flag.String("server", MQTT_IP_ADDRESS+":"+MQTT_PORT, "AODS server endpoint")
 var itafmServerAddr = flag.String("itafmserver", ITAFM_MQTT_IP_ADDRESS+":"+ITAFM_MQTT_PORT, "AODS server endpoint")
-var topicFLMOName = flag.String("flmtopic", MQTT_FLIGHT_MOVEMENT_TOPIC, "FLMO Topic")
-var topicIDEPName = flag.String("ideptopic", MQTT_IDEP_TOPIC, "IDEP Topic")
+
+// var topicFLMOName = flag.String("flmtopic", MQTT_FLIGHT_MOVEMENT_TOPIC, "FLMO Topic")
+var queueFLMOName = flag.String("flmqueue", MQTT_FLIGHT_MOVEMENT_QUEUE, "FLMO Queue")
+
+// var topicIDEPName = flag.String("ideptopic", MQTT_IDEP_TOPIC, "IDEP Topic")
+var queueIDEPName = flag.String("idepqueue", MQTT_IDEP_QUEUE, "IDEP Queue")
 var topicSURVName = flag.String("survtopic", MQTT_SURV_TOPIC, "SURV Topic")
 var itafmSurvTopicName = flag.String("itafmsurvtopic", ITAFM_SURV_TOPIC, "SURV Topic")
 var itafmFlightTopicName = flag.String("itafmflighttopic", ITAFM_SURV_TOPIC, "SURV Topic")
@@ -172,10 +176,10 @@ func recvIDEPMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 		return
 	}
 
-	sub, err := conn.Subscribe(*topicIDEPName, stomp.AckAuto)
+	sub, err := conn.Subscribe(*queueIDEPName, stomp.AckAuto)
 
 	if err != nil {
-		log.Println("cannot subscribe to", *topicIDEPName, err.Error())
+		log.Println("cannot subscribe to", *queueIDEPName, err.Error())
 		return
 	}
 
@@ -221,9 +225,9 @@ func recvFltMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 		return
 	}
 
-	sub, err := conn.Subscribe(*topicFLMOName, stomp.AckAuto)
+	sub, err := conn.Subscribe(*queueFLMOName, stomp.AckAuto)
 	if err != nil {
-		log.Println("cannot subscribe to", *topicFLMOName, err.Error())
+		log.Println("cannot subscribe to", *queueFLMOName, err.Error())
 		return
 	}
 
