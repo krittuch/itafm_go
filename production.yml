@@ -13,6 +13,21 @@ services:
     volumes:
       - .:/usr/src/app/
     network_mode: host
+
+  restarter:
+    image: docker:cli
+    restart: unless-stopped
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          if [ "$$(date +'%H:%M')" = 17:00' ]; then
+            docker restart gateway
+          fi
+          sleep 60
+        done
+
 #     networks:
 #       - agos_dj_agos_server_network
 
