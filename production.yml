@@ -22,7 +22,7 @@ services:
     command:
       - |
         while true; do
-          if [ "$$(date +'%H:%M')" = 17:00' ]; then
+          if [ "$$(date +'%H:%M')" = '17:00' ]; then
             docker restart gateway
           fi
           sleep 60
