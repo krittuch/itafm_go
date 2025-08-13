@@ -6,6 +6,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/go-stomp/stomp/v3"
@@ -31,9 +32,9 @@ var stop = make(chan bool)
 var options []func(*stomp.Conn) error = []func(*stomp.Conn) error{
 	stomp.ConnOpt.Login(MQTT_USER, MQTT_PASSWORD),
 	stomp.ConnOpt.Host("/"),
-	// stomp.ConnOpt.HeartBeat(60*time.Second, 60*time.Second),
-	// stomp.ConnOpt.HeartBeatError(360 * time.Second),
-	// stomp.ConnOpt.RcvReceiptTimeout(360 * time.Second),
+	stomp.ConnOpt.HeartBeat(60*time.Second, 60*time.Second),
+	stomp.ConnOpt.HeartBeatError(360 * time.Second),
+	stomp.ConnOpt.RcvReceiptTimeout(360 * time.Second),
 }
 
 var airlines []*model.CSVAirline
