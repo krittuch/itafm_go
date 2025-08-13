@@ -146,9 +146,10 @@ func recvSurvMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 		if len(msg.Body) <= 0 {
 			log.Println(msg.Body)
 			log.Println("Message is Empty")
-			conn.Disconnect()
-			connectToSurveillance(db, client)
-			return
+			// conn.Disconnect()
+			// connectToSurveillance(db, client)
+			// return
+			continue
 		}
 
 		if msg.Err != nil {
@@ -196,9 +197,9 @@ func recvIDEPMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 		if len(msg.Body) <= 0 {
 			log.Println(msg.Body)
 			log.Println("Message is Empty")
-			conn.Disconnect()
-			connectToIDEP(db, client)
-			return
+			// conn.Disconnect()
+			// connectToIDEP(db, client)
+			continue
 		}
 
 		if msg.Err != nil {
@@ -244,9 +245,9 @@ func recvFltMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 		if len(msg.Body) <= 0 {
 			log.Println(msg.Body)
 			log.Println("Message is Empty")
-			conn.Disconnect()
-			connectToFLT(db, client)
-			return
+			// conn.Disconnect()
+			// connectToFLT(db, client)
+			continue
 		}
 
 		if msg.Err != nil {
