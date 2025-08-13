@@ -149,6 +149,7 @@ func recvSurvMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 			log.Println("Message is Empty")
 			conn.Disconnect()
 			connectToSurveillance(db, client)
+			log.Println("Reconnect to Surveillance")
 			return
 		}
 
@@ -199,6 +200,7 @@ func recvIDEPMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 			log.Println("Message is Empty")
 			conn.Disconnect()
 			connectToIDEP(db, client)
+			log.Println("Reconnect to iDEP")
 			return
 		}
 
@@ -247,6 +249,7 @@ func recvFltMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
 			log.Println("Message is Empty")
 			conn.Disconnect()
 			connectToFLT(db, client)
+			log.Println("Reconnect to Flight Movement")
 			return
 		}
 
