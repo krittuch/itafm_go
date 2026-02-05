@@ -10,19 +10,18 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/go-stomp/stomp/v3"
 
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
 )
 
 func onFPLReceive(
-	msg *stomp.Message,
+	body []byte,
 	db *sql.DB,
 	flightController *controller.FlightController,
 	client mqtt.Client) {
 	fplData := model.FlightPlan{}
-	err := json.Unmarshal(msg.Body, &fplData)
+	err := json.Unmarshal(body, &fplData)
 	if err != nil {
 		log.Println(err)
 		return
@@ -109,15 +108,15 @@ func onFPLReceive(
 }
 
 func onCMDReceive(
-	msg *stomp.Message,
+	body []byte,
 	db *sql.DB,
 	flightController *controller.FlightController,
 	client mqtt.Client) {
 	fmvData := model.AODSFlightMovement{}
-	err := json.Unmarshal(msg.Body, &fmvData)
+	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
 		log.Println(err)
-		log.Println(string(msg.Body))
+		log.Println(string(body))
 		return
 	}
 
@@ -176,14 +175,14 @@ func onCMDReceive(
 }
 
 func onCNLReceive(
-	msg *stomp.Message,
+	body []byte,
 	db *sql.DB,
 	flightController *controller.FlightController) {
 	fmvData := model.AODSFlightMovement{}
-	err := json.Unmarshal(msg.Body, &fmvData)
+	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
 		log.Println(err)
-		log.Println(string(msg.Body))
+		log.Println(string(body))
 		return
 	}
 
@@ -201,7 +200,7 @@ func onCNLReceive(
 
 	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
 
-	log.Println(string(msg.Body))
+	log.Println(string(body))
 	log.Println(flightNumber)
 
 	// Create ATD
@@ -212,14 +211,14 @@ func onCNLReceive(
 }
 
 func onDLYReceive(
-	msg *stomp.Message,
+	body []byte,
 	db *sql.DB,
 	flightController *controller.FlightController) {
 	fmvData := model.AODSFlightMovement{}
-	err := json.Unmarshal(msg.Body, &fmvData)
+	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
 		log.Println(err)
-		log.Println(string(msg.Body))
+		log.Println(string(body))
 		return
 	}
 
@@ -237,7 +236,7 @@ func onDLYReceive(
 
 	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
 
-	log.Println(string(msg.Body))
+	log.Println(string(body))
 	log.Println(flightNumber)
 
 }

@@ -29,7 +29,6 @@ func initITAFM() mqtt.Client {
 	opts.OnConnect = connectHandler
 	opts.OnConnectionLost = connectLostHandler
 	client := mqtt.NewClient(opts)
-	
 
 	return client
 }

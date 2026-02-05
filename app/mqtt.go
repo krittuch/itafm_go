@@ -1,46 +1,58 @@
 package app
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"flag"
 	"log"
 	"os"
+	"strings"
 	"time"
-
-	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/go-stomp/stomp/v3"
-	"github.com/gocarina/gocsv"
 
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
+
+	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/gocarina/gocsv"
+	"github.com/segmentio/kafka-go"
 )
 
-var serverAddr = flag.String("server", MQTT_IP_ADDRESS+":"+MQTT_PORT, "AODS server endpoint")
-var itafmServerAddr = flag.String("itafmserver", ITAFM_MQTT_IP_ADDRESS+":"+ITAFM_MQTT_PORT, "AODS server endpoint")
-
-// var topicFLMOName = flag.String("flmtopic", MQTT_FLIGHT_MOVEMENT_TOPIC, "FLMO Topic")
-var queueFLMOName = flag.String("flmqueue", MQTT_FLIGHT_MOVEMENT_QUEUE, "FLMO Queue")
-
-// var topicIDEPName = flag.String("ideptopic", MQTT_IDEP_TOPIC, "IDEP Topic")
-var queueIDEPName = flag.String("idepqueue", MQTT_IDEP_QUEUE, "IDEP Queue")
-var topicSURVName = flag.String("survtopic", MQTT_SURV_TOPIC, "SURV Topic")
-var itafmSurvTopicName = flag.String("itafmsurvtopic", ITAFM_SURV_TOPIC, "SURV Topic")
-var itafmFlightTopicName = flag.String("itafmflighttopic", ITAFM_SURV_TOPIC, "SURV Topic")
-var stop = make(chan bool)
-
-var options []func(*stomp.Conn) error = []func(*stomp.Conn) error{
-	stomp.ConnOpt.Login(MQTT_USER, MQTT_PASSWORD),
-	stomp.ConnOpt.Host("/"),
-	stomp.ConnOpt.HeartBeat(60*time.Second, 60*time.Second),
-	stomp.ConnOpt.HeartBeatError(360 * time.Second),
-	stomp.ConnOpt.RcvReceiptTimeout(360 * time.Second),
-}
+var kafkaBrokers = flag.String("kafka-brokers", KAFKA_BROKERS, "Kafka broker endpoints separated by comma")
+var kafkaGroupID = flag.String("kafka-group", KAFKA_GROUP_ID, "Kafka consumer group id")
+var kafkaFlightTopic = flag.String("kafka-flight-topic", KAFKA_FLIGHT_TOPIC, "Kafka topic for flight movement")
+var kafkaIDEPTopic = flag.String("kafka-idep-topic", KAFKA_IDEP_TOPIC, "Kafka topic for IDEP")
+var kafkaSURVTopic = flag.String("kafka-surv-topic", KAFKA_SURV_TOPIC, "Kafka topic for surveillance")
+var itafmSurvTopicName = flag.String("itafm-surv-topic", ITAFM_SURV_TOPIC, "iTAFM surveillance topic")
 
 var airlines []*model.CSVAirline
 
-func StartConnectMQTT(a *App) {
+func StartConsumeKafka(a *App) {
+	loadAirlineReference()
+	flag.Parse()
 
+	client := initITAFM()
+	if token := client.Connect(); token.Wait() && token.Error() != nil {
+		log.Println(token.Error())
+		return
+	}
+
+	log.Println("Connected to iTAFM")
+
+	brokers := splitBrokers(*kafkaBrokers)
+	if len(brokers) == 0 {
+		log.Println("no Kafka brokers configured")
+		return
+	}
+
+	go consumeSurveillanceStream(brokers, *kafkaGroupID, *kafkaSURVTopic, a.DB, client)
+	go consumeIDEPStream(brokers, *kafkaGroupID, *kafkaIDEPTopic, a.DB, client)
+	go consumeFlightStream(brokers, *kafkaGroupID, *kafkaFlightTopic, a.DB, client)
+
+	select {}
+}
+
+func loadAirlineReference() {
 	in, err := os.Open("data/flight_airlinecode.csv")
 	if err != nil {
 		panic(err)
@@ -48,234 +60,105 @@ func StartConnectMQTT(a *App) {
 	defer in.Close()
 
 	airlines = []*model.CSVAirline{}
-
 	if err := gocsv.UnmarshalFile(in, &airlines); err != nil {
 		panic(err)
 	}
+}
 
-	flag.Parse()
-	// subFlight := make(chan bool)
+func consumeSurveillanceStream(brokers []string, groupID string, topic string, db *sql.DB, client mqtt.Client) {
+	runKafkaConsumerLoop(brokers, groupID, topic, func(value []byte) {
+		survController := controller.NewSurveillanceController(db)
+		onSurveillanceReceive(value, db, survController, client)
+	})
+}
 
-	// subscribe := make
+func consumeIDEPStream(brokers []string, groupID string, topic string, db *sql.DB, client mqtt.Client) {
+	flightController := controller.NewFlightController(db)
+	runKafkaConsumerLoop(brokers, groupID, topic, func(value []byte) {
+		onIDEPReceive(value, db, flightController, client)
+	})
+}
 
-	// Create connection to itafm mqtt
-	client := initITAFM()
+func consumeFlightStream(brokers []string, groupID string, topic string, db *sql.DB, client mqtt.Client) {
+	flightController := controller.NewFlightController(db)
+	runKafkaConsumerLoop(brokers, groupID, topic, func(value []byte) {
+		data := model.AODSFlightMovement{}
+		err := json.Unmarshal(value, &data)
+		if err != nil {
+			log.Println("error decoding flight payload:", err)
+			return
+		}
 
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		log.Println(token.Error())
-		return
+		switch data.CMD {
+		case "FPL":
+			onFPLReceive(value, db, flightController, client)
+		case "DEP", "ARR":
+			onCMDReceive(value, db, flightController, client)
+		case "CNL":
+			onCNLReceive(value, db, flightController)
+		case "DLY":
+			onDLYReceive(value, db, flightController)
+		default:
+			log.Println("ignored flight command:", data.CMD)
+		}
+	})
+}
+
+func runKafkaConsumerLoop(brokers []string, groupID string, topic string, handle func([]byte)) {
+	for {
+		err := consumeTopic(brokers, groupID, topic, handle)
+		log.Printf("consumer for topic %s failed: %v", topic, err)
+		time.Sleep(3 * time.Second)
 	}
-
-	log.Println("Connected To AODS Server")
-
-	// go recvFltMessages(subFlight, a.DB, client)
-	connectToSurveillance(a.DB, client)
-	connectToIDEP(a.DB, client)
-	connectToFLT(a.DB, client)
-
-	// Listen for a stop signal to break the loop and end the function
-
-	select {}
-	<-stop
-	log.Println("Stop MQTT Message")
-
 }
 
-func connectToSurveillance(db *sql.DB, client mqtt.Client) {
-	subSurv := make(chan bool)
-	go recvSurvMessages(subSurv, db, client)
-	// <-subSurv
+func consumeTopic(brokers []string, groupID string, topic string, handle func([]byte)) error {
+	reader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:  brokers,
+		GroupID:  groupID,
+		Topic:    topic,
+		MinBytes: 1,
+		MaxBytes: 10e6,
+	})
+	defer reader.Close()
+
+	ctx := context.Background()
+	for {
+		msg, err := reader.ReadMessage(ctx)
+		if err != nil {
+			return err
+		}
+		if len(msg.Value) == 0 {
+			continue
+		}
+		handle(msg.Value)
+	}
 }
 
-func connectToIDEP(db *sql.DB, client mqtt.Client) {
-	subIDEP := make(chan bool)
-	go recvIDEPMessages(subIDEP, db, client)
+func splitBrokers(raw string) []string {
+	parts := strings.Split(raw, ",")
+	brokers := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			brokers = append(brokers, trimmed)
+		}
+	}
+	return brokers
 }
 
-func connectToFLT(db *sql.DB, client mqtt.Client) {
-	subFlight := make(chan bool)
-	go recvFltMessages(subFlight, db, client)
-}
-
-// Change Flight number from ICAO to IATA
-// Such as THA616 to TG 616
+// Change flight number from ICAO to IATA, for example THA616 -> TG616.
 func ConvertToIATA(flightNumber string) (string, bool) {
 	if len(flightNumber) < 3 {
 		return flightNumber, false
 	}
 
 	icaoCode := flightNumber[:3]
-
 	for _, airline := range airlines {
 		if airline.ICAO == icaoCode {
-			return (airline.IATA + flightNumber[3:]), true
+			return airline.IATA + flightNumber[3:], true
 		}
 	}
 
 	return flightNumber, false
-}
-
-func recvSurvMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
-	defer func() {
-		stop <- true
-	}()
-
-	conn, err := stomp.Dial("tcp", *serverAddr, options...)
-
-	if err != nil {
-		println("cannot connect to server", err.Error())
-		return
-	}
-
-	sub, err := conn.Subscribe(*topicSURVName, stomp.AckAuto)
-
-	if err != nil {
-		log.Println("cannot subscribe to", *topicSURVName, err.Error())
-		return
-	}
-
-	log.Println("Connect to Surveillance")
-
-	for {
-
-		msg := <-sub.C
-
-		if msg == nil {
-			continue
-		}
-
-		if len(msg.Body) <= 0 {
-			log.Println(msg.Body)
-			log.Println("Message is Empty")
-			conn.Disconnect()
-			connectToSurveillance(db, client)
-			log.Println("Reconnect to Surveillance")
-			return
-		}
-
-		if msg.Err != nil {
-			log.Println("Message Error from Surveillance")
-			log.Println(msg.Err)
-
-			continue
-		}
-
-		survController := controller.NewSurveillanceController(db)
-
-		onSurveillanceReceive(msg, db, survController, client)
-	}
-}
-
-func recvIDEPMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
-	defer func() {
-		stop <- true
-	}()
-
-	conn, err := stomp.Dial("tcp", *serverAddr, options...)
-
-	if err != nil {
-		println("cannot connect to server", err.Error())
-		return
-	}
-
-	sub, err := conn.Subscribe(*queueIDEPName, stomp.AckAuto)
-
-	if err != nil {
-		log.Println("cannot subscribe to", *queueIDEPName, err.Error())
-		return
-	}
-
-	log.Println("Connect To iDEP")
-	flightController := controller.NewFlightController(db)
-
-	for {
-		msg := <-sub.C
-
-		if msg == nil {
-			continue
-		}
-
-		if len(msg.Body) <= 0 {
-			log.Println(msg.Body)
-			log.Println("Message is Empty")
-			conn.Disconnect()
-			connectToIDEP(db, client)
-			log.Println("Reconnect to iDEP")
-			return
-		}
-
-		if msg.Err != nil {
-			log.Println("Message Error from IDEP")
-			log.Println(msg.Err)
-			continue
-		}
-
-		onIDEPReceive(msg, db, flightController, client)
-
-	}
-
-}
-
-func recvFltMessages(_ chan bool, db *sql.DB, client mqtt.Client) {
-	defer func() {
-		stop <- true
-	}()
-
-	conn, err := stomp.Dial("tcp", *serverAddr, options...)
-
-	if err != nil {
-		println("cannot connect to server", err.Error())
-		return
-	}
-
-	sub, err := conn.Subscribe(*queueFLMOName, stomp.AckAuto)
-	if err != nil {
-		log.Println("cannot subscribe to", *queueFLMOName, err.Error())
-		return
-	}
-
-	log.Println("Connect To Flight Movement")
-	flightController := controller.NewFlightController(db)
-
-	for {
-		msg := <-sub.C
-
-		if msg == nil {
-			continue
-		}
-
-		if len(msg.Body) <= 0 {
-			log.Println(msg.Body)
-			log.Println("Message is Empty")
-			conn.Disconnect()
-			connectToFLT(db, client)
-			log.Println("Reconnect to Flight Movement")
-			return
-		}
-
-		if msg.Err != nil {
-			log.Println("Message Error from FLT Plan")
-			log.Println(msg.Err)
-			continue
-		}
-
-		data := model.AODSFlightMovement{}
-		err := json.Unmarshal(msg.Body, &data)
-
-		if err != nil {
-			log.Println("Erro  on Flight Movement mqtt")
-			log.Println(err)
-			continue
-		}
-
-		if data.CMD == "FPL" {
-			onFPLReceive(msg, db, flightController, client)
-		} else if data.CMD == "DEP" || data.CMD == "ARR" {
-			onCMDReceive(msg, db, flightController, client)
-		} else if data.CMD == "CNL" {
-			onCNLReceive(msg, db, flightController)
-		} else if data.CMD == "DLY" {
-			onDLYReceive(msg, db, flightController)
-		}
-	}
 }

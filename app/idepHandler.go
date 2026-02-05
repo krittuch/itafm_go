@@ -11,20 +11,19 @@ import (
 	"strings"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/go-stomp/stomp/v3"
 )
 
 // Mock data as a global variable for demonstration purposes
 
 func onIDEPReceive(
-	msg *stomp.Message,
+	body []byte,
 	db *sql.DB,
 	flightController *controller.FlightController,
 	client mqtt.Client) {
 	// Simulate receiving message
 
 	data := model.IDEP{}
-	err := json.Unmarshal(msg.Body, &data)
+	err := json.Unmarshal(body, &data)
 	if err != nil {
 		log.Println("Error unmarshalling IDEP data:", err)
 		return

@@ -2,7 +2,6 @@ package main
 
 import (
 	"aerothai/itafm/app"
-
 )
 
 func main() {

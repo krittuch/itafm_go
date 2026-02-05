@@ -51,22 +51,31 @@ var (
 	DBNAME  = os.Getenv("DB_NAME")
 	DBPORT  = os.Getenv("DB_PORT")
 
-	MQTT_IP_ADDRESS = os.Getenv("MQTT_IP_ADDRESS")
-	MQTT_PORT       = os.Getenv("MQTT_PORT")
-	MQTT_USER       = os.Getenv("MQTT_USER")
-	MQTT_PASSWORD   = os.Getenv("MQTT_PASSWORD")
-
-	MQTT_FLIGHT_MOVEMENT_TOPIC = os.Getenv("MQTT_FLIGHT_MOVEMENT_TOPIC")
-	MQTT_FLIGHT_MOVEMENT_QUEUE = os.Getenv("MQTT_FLIGHT_MOVEMENT_QUEUE")
-	MQTT_IDEP_TOPIC            = os.Getenv("MQTT_IDEP_TOPIC")
-	MQTT_IDEP_QUEUE            = os.Getenv("MQTT_IDEP_QUEUE")
-	MQTT_SURV_TOPIC            = os.Getenv("MQTT_SURV_TOPIC")
-
 	ITAFM_MQTT_IP_ADDRESS = os.Getenv("ITAFM_MQTT_IP_ADDRESS")
 	ITAFM_MQTT_PORT       = os.Getenv("ITAFM_MQTT_PORT")
 	ITAFM_MQTT_USER       = os.Getenv("ITAFM_MQTT_USER")
-	ITAFM_MQTT_PASSWORD   = os.Getenv("ITAFM_MQTT_PASSWORD")
+	ITAFM_MQTT_PASSWORD   = lookupEnvWithFallback("ITAFM_MQTT_PASSWORD", "ITAFM_MQTT_PASS")
 
 	ITAFM_SURV_TOPIC = os.Getenv("ITAFM_SURV_TOPIC")
 	ITAFM_FLTH_TOPIC = os.Getenv("ITAFM_FLTH_TOPIC")
+
+	KAFKA_BROKERS      = lookupEnvWithDefault("KAFKA_BROKERS", "localhost:9092")
+	KAFKA_GROUP_ID     = lookupEnvWithDefault("KAFKA_GROUP_ID", "itafm-go-gateway")
+	KAFKA_FLIGHT_TOPIC = lookupEnvWithDefault("KAFKA_FLIGHT_TOPIC", "itafm.flight_movement")
+	KAFKA_IDEP_TOPIC   = lookupEnvWithDefault("KAFKA_IDEP_TOPIC", "itafm.idep")
+	KAFKA_SURV_TOPIC   = lookupEnvWithDefault("KAFKA_SURV_TOPIC", "itafm.surveillance")
 )
+
+func lookupEnvWithDefault(key string, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func lookupEnvWithFallback(primary string, secondary string) string {
+	if value := os.Getenv(primary); value != "" {
+		return value
+	}
+	return os.Getenv(secondary)
+}

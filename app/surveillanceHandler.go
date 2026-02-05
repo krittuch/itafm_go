@@ -6,19 +6,18 @@ import (
 	"log"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/go-stomp/stomp/v3"
 
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
 )
 
-func onSurveillanceReceive(msg *stomp.Message,
+func onSurveillanceReceive(body []byte,
 	db *sql.DB,
 	surveillanceController *controller.SurveillanceController,
 	client mqtt.Client) {
 
 	survData := model.AODSSurveillance{}
-	err := json.Unmarshal(msg.Body, &survData)
+	err := json.Unmarshal(body, &survData)
 
 	if err != nil {
 		log.Println(err)

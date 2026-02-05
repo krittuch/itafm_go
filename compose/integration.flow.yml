@@ -1,0 +1,99 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: itafm_flow_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: itafm_test
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+    ports:
+      - "15432:5432"
+    volumes:
+      - ../integration/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  activemq:
+    image: apache/activemq-classic:5.18.3
+    container_name: itafm_flow_activemq
+    restart: unless-stopped
+    ports:
+      - "18161:8161"
+      - "16113:61613"
+      - "16116:61616"
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: itafm_flow_mosquitto
+    restart: unless-stopped
+    volumes:
+      - ../integration/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "11883:1883"
+
+  kafka:
+    image: redpandadata/redpanda:v24.2.9
+    container_name: itafm_flow_kafka
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --check=false
+      - --node-id=0
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://kafka:9092
+
+  java_broker:
+    container_name: itafm_flow_java_broker
+    build:
+      context: ..
+      dockerfile: java-broker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - activemq
+      - kafka
+    environment:
+      ACTIVEMQ_BROKER_URL: tcp://activemq:61616
+      MQTT_USER: admin
+      MQTT_PASSWORD: admin
+      MQTT_FLIGHT_MOVEMENT_QUEUE: /queue/FLMO_ITFM_Queue
+      MQTT_IDEP_QUEUE: /queue/IDEP_ITFM_Queue
+      MQTT_SURV_TOPIC: /topic/AS62_VTBB_ITFM2_Topic
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_FLIGHT_TOPIC: itafm.flight_movement
+      KAFKA_IDEP_TOPIC: itafm.idep
+      KAFKA_SURV_TOPIC: itafm.surveillance
+      KAFKA_CLIENT_ID: itafm-flow-java-broker
+
+  gateway:
+    container_name: itafm_flow_gateway
+    build:
+      context: ..
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - kafka
+      - java_broker
+      - mosquitto
+    command: ["/app/main"]
+    environment:
+      DB_USER: test
+      DB_PASSWORD: test
+      DB_HOST: postgres:5432
+      DB_PORT: "5432"
+      DB_NAME: itafm_test
+      ITAFM_MQTT_IP_ADDRESS: mosquitto
+      ITAFM_MQTT_PORT: "1883"
+      ITAFM_MQTT_USER: ""
+      ITAFM_MQTT_PASS: ""
+      ITAFM_SURV_TOPIC: client/as62
+      ITAFM_FLTH_TOPIC: server/trigger/flight/
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_GROUP_ID: itafm-go-gateway-flow-test
+      KAFKA_FLIGHT_TOPIC: itafm.flight_movement
+      KAFKA_IDEP_TOPIC: itafm.idep
+      KAFKA_SURV_TOPIC: itafm.surveillance

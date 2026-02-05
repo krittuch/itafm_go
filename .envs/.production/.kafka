@@ -1,0 +1,6 @@
+KAFKA_BROKERS=localhost:9092
+KAFKA_GROUP_ID=itafm-go-gateway-prod
+KAFKA_FLIGHT_TOPIC=itafm.flight_movement
+KAFKA_IDEP_TOPIC=itafm.idep
+KAFKA_SURV_TOPIC=itafm.surveillance
+KAFKA_CLIENT_ID=itafm-amq-kafka-broker-prod
