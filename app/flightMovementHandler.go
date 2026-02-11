@@ -27,7 +27,6 @@ func onFPLReceive(
 	r, err2 := regexp.Compile(`(DOF\/)\w+`)
 
 	if err2 == nil {
-		// log.Println(r.FindString(data.ITEM18))
 		dof := r.FindString(fplData.ITEM18)
 		fplData.DOF = strings.Replace(dof, `DOF/`, "", 1)
 	} else {
@@ -39,7 +38,6 @@ func onFPLReceive(
 	register := ""
 
 	if err3 == nil {
-		// log.Println(r.FindString(data.ITEM18))
 		register = regex.FindString(fplData.ITEM18)
 		register = strings.Replace(register, `REG/`, "", 1)
 	} else {
@@ -110,7 +108,6 @@ func onCMDReceive(
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
 		log.Println(err)
-		log.Println(string(body))
 		return
 	}
 
@@ -175,7 +172,6 @@ func onCNLReceive(
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
 		log.Println(err)
-		log.Println(string(body))
 		return
 	}
 
@@ -183,18 +179,9 @@ func onCNLReceive(
 
 	airlineController := controller.NewAirlineController(db)
 
-	airline, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3])
-
-	if errAirline != nil {
-		log.Println("Could not find airline")
-		log.Println(errAirline)
+	if _, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3]); errAirline != nil {
 		return
 	}
-
-	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
-
-	log.Println(string(body))
-	log.Println(flightNumber)
 
 	// Create ATD
 	// dateOfFlight := ""
@@ -211,7 +198,6 @@ func onDLYReceive(
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
 		log.Println(err)
-		log.Println(string(body))
 		return
 	}
 
@@ -219,18 +205,9 @@ func onDLYReceive(
 
 	airlineController := controller.NewAirlineController(db)
 
-	airline, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3])
-
-	if errAirline != nil {
-		log.Println("Could not find airline")
-		log.Println(errAirline)
+	if _, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3]); errAirline != nil {
 		return
 	}
-
-	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
-
-	log.Println(string(body))
-	log.Println(flightNumber)
 
 }
 
@@ -242,21 +219,12 @@ func onCHGReceive(
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
 		log.Println(err)
-		log.Println(string(body))
 		return
 	}
 
 	airlineController := controller.NewAirlineController(db)
 
-	airline, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3])
-	if errAirline != nil {
-		log.Println("Could not find airline")
-		log.Println(errAirline)
+	if _, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3]); errAirline != nil {
 		return
 	}
-
-	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
-
-	log.Println(string(body))
-	log.Println(flightNumber)
 }
