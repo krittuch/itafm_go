@@ -1,9 +1,11 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"flag"
 	"log"
 	"os"
@@ -26,6 +28,8 @@ var kafkaSURVTopic = flag.String("kafka-surv-topic", KAFKA_SURV_TOPIC, "Kafka to
 var itafmSurvTopicName = flag.String("itafm-surv-topic", ITAFM_SURV_TOPIC, "iTAFM surveillance topic")
 
 var airlines []*model.CSVAirline
+
+var errEmptyFlightPayload = errors.New("empty flight payload")
 
 func StartConsumeKafka(a *App) {
 	loadAirlineReference()
@@ -82,24 +86,39 @@ func consumeIDEPStream(brokers []string, groupID string, topic string, db *sql.D
 func consumeFlightStream(brokers []string, groupID string, topic string, db *sql.DB, client mqtt.Client) {
 	flightController := controller.NewFlightController(db)
 	runKafkaConsumerLoop(brokers, groupID, topic, func(value []byte) {
-		data := model.AODSFlightMovement{}
-		err := json.Unmarshal(value, &data)
+		records, err := splitFlightPayloadRecords(value)
 		if err != nil {
 			log.Println("error decoding flight payload:", err)
 			return
 		}
 
-		switch data.CMD {
-		case "FPL":
-			onFPLReceive(value, db, flightController, client)
-		case "DEP", "ARR":
-			onCMDReceive(value, db, flightController, client)
-		case "CNL":
-			onCNLReceive(value, db, flightController)
-		case "DLY":
-			onDLYReceive(value, db, flightController)
-		default:
-			log.Println("ignored flight command:", data.CMD)
+		for _, record := range records {
+			command, err := extractFlightCommand(record)
+			if err != nil {
+				log.Println("error decoding flight command:", err)
+				continue
+			}
+
+			if isFlightPlanCommand(command) {
+				onFPLReceive(record, db, flightController, client)
+				continue
+			}
+
+			if !isNonFlightPlanCommand(command) {
+				log.Println("ignored flight command:", command)
+				continue
+			}
+
+			switch command {
+			case "DEP", "ARR":
+				onCMDReceive(record, db, flightController, client)
+			case "CNL":
+				onCNLReceive(record, db, flightController)
+			case "CHG":
+				onCHGReceive(record, db, flightController)
+			case "DLA", "DLY":
+				onDLYReceive(record, db, flightController)
+			}
 		}
 	})
 }
@@ -145,6 +164,70 @@ func splitBrokers(raw string) []string {
 		}
 	}
 	return brokers
+}
+
+func splitFlightPayloadRecords(payload []byte) ([][]byte, error) {
+	trimmedPayload := bytes.TrimSpace(payload)
+	if len(trimmedPayload) == 0 {
+		return nil, errEmptyFlightPayload
+	}
+
+	if trimmedPayload[0] == '[' {
+		var records []json.RawMessage
+		if err := json.Unmarshal(trimmedPayload, &records); err != nil {
+			return nil, err
+		}
+
+		result := make([][]byte, 0, len(records))
+		for _, record := range records {
+			trimmedRecord := bytes.TrimSpace(record)
+			if len(trimmedRecord) == 0 || bytes.Equal(trimmedRecord, []byte("null")) {
+				continue
+			}
+			result = append(result, append([]byte(nil), trimmedRecord...))
+		}
+
+		if len(result) == 0 {
+			return nil, errEmptyFlightPayload
+		}
+		return result, nil
+	}
+
+	return [][]byte{append([]byte(nil), trimmedPayload...)}, nil
+}
+
+func extractFlightCommand(payload []byte) (string, error) {
+	var data struct {
+		CMD string `json:"CMD"`
+	}
+
+	if err := json.Unmarshal(payload, &data); err != nil {
+		return "", err
+	}
+
+	command := normalizeFlightCommand(data.CMD)
+	if command == "" {
+		return "", errors.New("missing CMD field")
+	}
+
+	return command, nil
+}
+
+func normalizeFlightCommand(command string) string {
+	return strings.ToUpper(strings.TrimSpace(command))
+}
+
+func isFlightPlanCommand(command string) bool {
+	return normalizeFlightCommand(command) == "FPL"
+}
+
+func isNonFlightPlanCommand(command string) bool {
+	switch normalizeFlightCommand(command) {
+	case "ARR", "CNL", "CHG", "DLA", "DLY", "DEP":
+		return true
+	default:
+		return false
+	}
 }
 
 // Change flight number from ICAO to IATA, for example THA616 -> TG616.

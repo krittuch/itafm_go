@@ -240,3 +240,30 @@ func onDLYReceive(
 	log.Println(flightNumber)
 
 }
+
+func onCHGReceive(
+	body []byte,
+	db *sql.DB,
+	flightController *controller.FlightController) {
+	fmvData := model.AODSFlightMovement{}
+	err := json.Unmarshal(body, &fmvData)
+	if err != nil {
+		log.Println(err)
+		log.Println(string(body))
+		return
+	}
+
+	airlineController := controller.NewAirlineController(db)
+
+	airline, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3])
+	if errAirline != nil {
+		log.Println("Could not find airline")
+		log.Println(errAirline)
+		return
+	}
+
+	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
+
+	log.Println(string(body))
+	log.Println(flightNumber)
+}

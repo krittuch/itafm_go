@@ -1,0 +1,22 @@
+{
+  "CallSign": "BAV73",
+  "Dep": "",
+  "Dest": "",
+  "AircraftType": "",
+  "WakeTurbulance": "",
+  "Lat": 20.85061945763,
+  "Lon": 99.66919284992,
+  "Altitude": 340.25,
+  "GroundSpeed": 506.0,
+  "Heading": 309.90234360896,
+  "AircraftAddress": "8881b2",
+  "SIC": 17,
+  "SAC": 132,
+  "SSRCode": "7021",
+  "AsterixCat": "62",
+  "dt": "2023-10-27T04:14:20Z",
+  "trackNumber": 590,
+  "vx": -372.7321809575,
+  "vy": 326.0799131975,
+  "cdm": "M"
+}

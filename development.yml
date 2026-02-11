@@ -6,7 +6,7 @@ services:
     container_name: itafm_kafka_dev
     restart: always
     ports:
-      - "9092:9092"
+      - "9099:9092"
     command:
       - redpanda
       - start
@@ -17,7 +17,7 @@ services:
       - --check=false
       - --node-id=0
       - --kafka-addr=PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr=PLAINTEXT://localhost:9092
+      - --advertise-kafka-addr=PLAINTEXT://localhost:9099
     volumes:
       - kafka_data_dev:/var/lib/redpanda/data
 

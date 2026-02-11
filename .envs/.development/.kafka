@@ -1,4 +1,4 @@
-KAFKA_BROKERS=localhost:9092
+KAFKA_BROKERS=localhost:9099
 KAFKA_GROUP_ID=itafm-go-gateway-dev
 KAFKA_FLIGHT_TOPIC=itafm.flight_movement
 KAFKA_IDEP_TOPIC=itafm.idep

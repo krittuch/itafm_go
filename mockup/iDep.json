@@ -1,0 +1,16 @@
+{
+  "AircraftId": "TVJ324",
+  "Departure": "VTBS",
+  "Destination": "VTSS",
+  "EOBT": "2023-10-03T04:15:00",
+  "departureRunway": "19L",
+  "ArrivalRunway": null,
+  "DepartureParkingStand": "G1",
+  "ArrivalParkingStand": null,
+  "EXOT": 18.0,
+  "TOBT": "2023-10-03T04:25:00",
+  "TSAT": "2023-10-03T04:25:00",
+  "AIBT": null,
+  "AOBT": null,
+  "URNO": null
+}
