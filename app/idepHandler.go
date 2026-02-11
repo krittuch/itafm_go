@@ -9,8 +9,6 @@ import (
 	"log"
 	"regexp"
 	"strings"
-
-	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 // Mock data as a global variable for demonstration purposes
@@ -18,8 +16,7 @@ import (
 func onIDEPReceive(
 	body []byte,
 	db *sql.DB,
-	flightController *controller.FlightController,
-	client mqtt.Client) {
+	flightController *controller.FlightController) {
 	// Simulate receiving message
 
 	data := model.IDEP{}
@@ -54,12 +51,10 @@ func onIDEPReceive(
 
 	if *patchFlight.Bay != "" {
 		flightController.UpdateBay(patchFlight.FlightNumber, data.EOBT, *patchFlight.Bay)
-		sendToITAFM(client, "server/trigger/flight/"+patchFlight.FlightNumber, "")
 	}
 
 	if !strings.Contains(data.TOBT, "0001-01-01") {
 		flightController.UpdateTOBT(patchFlight.FlightNumber, data.TOBT)
-		sendToITAFM(client, "server/trigger/flight/"+patchFlight.FlightNumber, "")
 	}
 
 }

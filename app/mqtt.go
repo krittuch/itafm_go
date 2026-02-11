@@ -15,7 +15,6 @@ import (
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
 
-	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/gocarina/gocsv"
 	"github.com/segmentio/kafka-go"
 )
@@ -25,7 +24,6 @@ var kafkaGroupID = flag.String("kafka-group", KAFKA_GROUP_ID, "Kafka consumer gr
 var kafkaFlightTopic = flag.String("kafka-flight-topic", KAFKA_FLIGHT_TOPIC, "Kafka topic for flight movement")
 var kafkaIDEPTopic = flag.String("kafka-idep-topic", KAFKA_IDEP_TOPIC, "Kafka topic for IDEP")
 var kafkaSURVTopic = flag.String("kafka-surv-topic", KAFKA_SURV_TOPIC, "Kafka topic for surveillance")
-var itafmSurvTopicName = flag.String("itafm-surv-topic", ITAFM_SURV_TOPIC, "iTAFM surveillance topic")
 
 var airlines []*model.CSVAirline
 
@@ -35,23 +33,15 @@ func StartConsumeKafka(a *App) {
 	loadAirlineReference()
 	flag.Parse()
 
-	client := initITAFM()
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		log.Println(token.Error())
-		return
-	}
-
-	log.Println("Connected to iTAFM")
-
 	brokers := splitBrokers(*kafkaBrokers)
 	if len(brokers) == 0 {
 		log.Println("no Kafka brokers configured")
 		return
 	}
 
-	go consumeSurveillanceStream(brokers, *kafkaGroupID, *kafkaSURVTopic, a.DB, client)
-	go consumeIDEPStream(brokers, *kafkaGroupID, *kafkaIDEPTopic, a.DB, client)
-	go consumeFlightStream(brokers, *kafkaGroupID, *kafkaFlightTopic, a.DB, client)
+	go consumeSurveillanceStream(brokers, *kafkaGroupID, *kafkaSURVTopic, a.DB)
+	go consumeIDEPStream(brokers, *kafkaGroupID, *kafkaIDEPTopic, a.DB)
+	go consumeFlightStream(brokers, *kafkaGroupID, *kafkaFlightTopic, a.DB)
 
 	select {}
 }
@@ -69,21 +59,21 @@ func loadAirlineReference() {
 	}
 }
 
-func consumeSurveillanceStream(brokers []string, groupID string, topic string, db *sql.DB, client mqtt.Client) {
+func consumeSurveillanceStream(brokers []string, groupID string, topic string, db *sql.DB) {
 	runKafkaConsumerLoop(brokers, groupID, topic, func(value []byte) {
 		survController := controller.NewSurveillanceController(db)
-		onSurveillanceReceive(value, db, survController, client)
+		onSurveillanceReceive(value, survController)
 	})
 }
 
-func consumeIDEPStream(brokers []string, groupID string, topic string, db *sql.DB, client mqtt.Client) {
+func consumeIDEPStream(brokers []string, groupID string, topic string, db *sql.DB) {
 	flightController := controller.NewFlightController(db)
 	runKafkaConsumerLoop(brokers, groupID, topic, func(value []byte) {
-		onIDEPReceive(value, db, flightController, client)
+		onIDEPReceive(value, db, flightController)
 	})
 }
 
-func consumeFlightStream(brokers []string, groupID string, topic string, db *sql.DB, client mqtt.Client) {
+func consumeFlightStream(brokers []string, groupID string, topic string, db *sql.DB) {
 	flightController := controller.NewFlightController(db)
 	runKafkaConsumerLoop(brokers, groupID, topic, func(value []byte) {
 		records, err := splitFlightPayloadRecords(value)
@@ -100,7 +90,7 @@ func consumeFlightStream(brokers []string, groupID string, topic string, db *sql
 			}
 
 			if isFlightPlanCommand(command) {
-				onFPLReceive(record, db, flightController, client)
+				onFPLReceive(record, db, flightController)
 				continue
 			}
 
@@ -111,7 +101,7 @@ func consumeFlightStream(brokers []string, groupID string, topic string, db *sql
 
 			switch command {
 			case "DEP", "ARR":
-				onCMDReceive(record, db, flightController, client)
+				onCMDReceive(record, db, flightController)
 			case "CNL":
 				onCNLReceive(record, db, flightController)
 			case "CHG":

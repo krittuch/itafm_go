@@ -1,20 +1,14 @@
 package app
 
 import (
-	"database/sql"
 	"encoding/json"
 	"log"
-
-	mqtt "github.com/eclipse/paho.mqtt.golang"
 
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
 )
 
-func onSurveillanceReceive(body []byte,
-	db *sql.DB,
-	surveillanceController *controller.SurveillanceController,
-	client mqtt.Client) {
+func onSurveillanceReceive(body []byte, surveillanceController *controller.SurveillanceController) {
 
 	survData := model.AODSSurveillance{}
 	err := json.Unmarshal(body, &survData)
@@ -35,16 +29,7 @@ func onSurveillanceReceive(body []byte,
 		return
 	}
 
-	// surveillanceController.InsertOrUpdateSurveillance(&survData)
-
-	//Convert survData to string
-	survDataString, errMashal := json.Marshal(survData)
-	if errMashal != nil {
-		log.Println(errMashal)
-		return
-
+	if !surveillanceController.InsertOrUpdateSurveillance(&survData) {
+		log.Println("failed to insert/update surveillance record")
 	}
-
-	// Also Send to itafm
-	sendToITAFM(client, *itafmSurvTopicName, string(survDataString))
 }

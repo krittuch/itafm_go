@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	mqtt "github.com/eclipse/paho.mqtt.golang"
-
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
 )
@@ -18,8 +16,7 @@ import (
 func onFPLReceive(
 	body []byte,
 	db *sql.DB,
-	flightController *controller.FlightController,
-	client mqtt.Client) {
+	flightController *controller.FlightController) {
 	fplData := model.FlightPlan{}
 	err := json.Unmarshal(body, &fplData)
 	if err != nil {
@@ -103,15 +100,12 @@ func onFPLReceive(
 		}
 	}
 
-	sendToITAFM(client, "server/trigger/flight/"+postFlight.FlightNumber, "")
-
 }
 
 func onCMDReceive(
 	body []byte,
 	db *sql.DB,
-	flightController *controller.FlightController,
-	client mqtt.Client) {
+	flightController *controller.FlightController) {
 	fmvData := model.AODSFlightMovement{}
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
@@ -171,7 +165,6 @@ func onCMDReceive(
 		flightController.UpdateArrivalFlight(flightNumber, fmvData.DOF, std)
 	}
 
-	sendToITAFM(client, "server/trigger/flight/"+flightNumber, "")
 }
 
 func onCNLReceive(
