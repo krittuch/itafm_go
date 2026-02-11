@@ -16,12 +16,12 @@ import (
 func onFPLReceive(
 	body []byte,
 	db *sql.DB,
-	flightController *controller.FlightController) {
+	flightController *controller.FlightController) bool {
 	fplData := model.FlightPlan{}
 	err := json.Unmarshal(body, &fplData)
 	if err != nil {
 		log.Println(err)
-		return
+		return false
 	}
 
 	r, err2 := regexp.Compile(`(DOF\/)\w+`)
@@ -57,14 +57,14 @@ func onFPLReceive(
 	iata, success := ConvertToIATA(icaoCode)
 
 	if !success {
-		return
+		return false
 	}
 
 	numberRegex := regexp.MustCompile(`\d+`)
 	matchString := numberRegex.FindString(fplData.CALLSIGN)
 	if len(matchString) <= 0 {
 		log.Println("Cannot find number in ", fplData.CALLSIGN)
-		return
+		return false
 	}
 
 	flightNumber := strings.TrimLeft(matchString, "0")
@@ -98,17 +98,18 @@ func onFPLReceive(
 		}
 	}
 
+	return true
 }
 
 func onCMDReceive(
 	body []byte,
 	db *sql.DB,
-	flightController *controller.FlightController) {
+	flightController *controller.FlightController) bool {
 	fmvData := model.AODSFlightMovement{}
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
 		log.Println(err)
-		return
+		return false
 	}
 
 	// Change icao to iata
@@ -121,7 +122,7 @@ func onCMDReceive(
 	airline, errAirline := airlineController.GetAirline(icaoCode)
 
 	if errAirline != nil {
-		return
+		return false
 	}
 
 	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
@@ -136,7 +137,7 @@ func onCMDReceive(
 		dateOfFlight = strings.Join([]string{"20", fmvData.DOF}, "")
 		if len(dateOfFlight) < 4 {
 			log.Println("Error DEP CMD", dateOfFlight)
-			return
+			return false
 		}
 		dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
 		std = strings.Join([]string{dateOfFlight, " ", timeStr[:2], ":", timeStr[2:4], ":00+00"}, "")
@@ -153,7 +154,7 @@ func onCMDReceive(
 			timeStr[2:4], ":00+00",
 		}, "")
 	} else {
-		return
+		return false
 	}
 
 	if fmvData.CMD == "DEP" {
@@ -162,6 +163,7 @@ func onCMDReceive(
 		flightController.UpdateArrivalFlight(flightNumber, fmvData.DOF, std)
 	}
 
+	return true
 }
 
 func onCNLReceive(

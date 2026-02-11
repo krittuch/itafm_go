@@ -10,4 +10,4 @@ FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /build/target/activemq-kafka-broker.jar /app/activemq-kafka-broker.jar
 
-ENTRYPOINT ["java", "-jar", "/app/activemq-kafka-broker.jar"]
+ENTRYPOINT ["java", "--add-modules", "jdk.httpserver", "-jar", "/app/activemq-kafka-broker.jar"]

@@ -39,9 +39,12 @@ func StartConsumeKafka(a *App) {
 		return
 	}
 
-	go consumeSurveillanceStream(brokers, *kafkaGroupID, *kafkaSURVTopic, a.DB)
-	go consumeIDEPStream(brokers, *kafkaGroupID, *kafkaIDEPTopic, a.DB)
-	go consumeFlightStream(brokers, *kafkaGroupID, *kafkaFlightTopic, a.DB)
+	monitor := newGatewayMonitor(*kafkaFlightTopic, *kafkaIDEPTopic, *kafkaSURVTopic)
+	monitor.start()
+
+	go consumeSurveillanceStream(brokers, *kafkaGroupID, *kafkaSURVTopic, a.DB, monitor.route("surveillance"))
+	go consumeIDEPStream(brokers, *kafkaGroupID, *kafkaIDEPTopic, a.DB, monitor.route("idep"))
+	go consumeFlightStream(brokers, *kafkaGroupID, *kafkaFlightTopic, a.DB, monitor.route("flight"))
 
 	select {}
 }
@@ -59,25 +62,37 @@ func loadAirlineReference() {
 	}
 }
 
-func consumeSurveillanceStream(brokers []string, groupID string, topic string, db *sql.DB) {
-	runKafkaConsumerLoop(brokers, groupID, topic, func(value []byte) {
+func consumeSurveillanceStream(brokers []string, groupID string, topic string, db *sql.DB, monitor *gatewayRouteMonitor) {
+	runKafkaConsumerLoop(brokers, groupID, topic, monitor, func(value []byte) {
+		monitor.RecordReceived()
 		survController := controller.NewSurveillanceController(db)
-		onSurveillanceReceive(value, survController)
+		if onSurveillanceReceive(value, survController) {
+			monitor.RecordProcessed()
+		} else {
+			monitor.RecordSkipped()
+		}
 	})
 }
 
-func consumeIDEPStream(brokers []string, groupID string, topic string, db *sql.DB) {
+func consumeIDEPStream(brokers []string, groupID string, topic string, db *sql.DB, monitor *gatewayRouteMonitor) {
 	flightController := controller.NewFlightController(db)
-	runKafkaConsumerLoop(brokers, groupID, topic, func(value []byte) {
-		onIDEPReceive(value, db, flightController)
+	runKafkaConsumerLoop(brokers, groupID, topic, monitor, func(value []byte) {
+		monitor.RecordReceived()
+		if onIDEPReceive(value, db, flightController) {
+			monitor.RecordProcessed()
+		} else {
+			monitor.RecordSkipped()
+		}
 	})
 }
 
-func consumeFlightStream(brokers []string, groupID string, topic string, db *sql.DB) {
+func consumeFlightStream(brokers []string, groupID string, topic string, db *sql.DB, monitor *gatewayRouteMonitor) {
 	flightController := controller.NewFlightController(db)
-	runKafkaConsumerLoop(brokers, groupID, topic, func(value []byte) {
+	runKafkaConsumerLoop(brokers, groupID, topic, monitor, func(value []byte) {
+		monitor.RecordReceived()
 		records, err := splitFlightPayloadRecords(value)
 		if err != nil {
+			monitor.RecordDecodeError(err)
 			log.Println("error decoding flight payload:", err)
 			return
 		}
@@ -85,37 +100,57 @@ func consumeFlightStream(brokers []string, groupID string, topic string, db *sql
 		for _, record := range records {
 			command, err := extractFlightCommand(record)
 			if err != nil {
+				monitor.RecordDecodeError(err)
 				log.Println("error decoding flight command:", err)
 				continue
 			}
 
 			if isFlightPlanCommand(command) {
-				onFPLReceive(record, db, flightController)
+				if onFPLReceive(record, db, flightController) {
+					monitor.RecordProcessed()
+				} else {
+					monitor.RecordSkipped()
+				}
 				continue
 			}
 
 			if !isNonFlightPlanCommand(command) {
+				monitor.RecordSkipped()
 				log.Println("ignored flight command:", command)
 				continue
 			}
 
 			switch command {
 			case "DEP", "ARR":
-				onCMDReceive(record, db, flightController)
+				if onCMDReceive(record, db, flightController) {
+					monitor.RecordProcessed()
+				} else {
+					monitor.RecordSkipped()
+				}
 			case "CNL":
 				onCNLReceive(record, db, flightController)
+				monitor.RecordSkipped()
 			case "CHG":
 				onCHGReceive(record, db, flightController)
+				monitor.RecordSkipped()
 			case "DLA", "DLY":
 				onDLYReceive(record, db, flightController)
+				monitor.RecordSkipped()
 			}
 		}
 	})
 }
 
-func runKafkaConsumerLoop(brokers []string, groupID string, topic string, handle func([]byte)) {
+func runKafkaConsumerLoop(
+	brokers []string,
+	groupID string,
+	topic string,
+	monitor *gatewayRouteMonitor,
+	handle func([]byte),
+) {
 	for {
 		err := consumeTopic(brokers, groupID, topic, handle)
+		monitor.RecordConsumerError(err)
 		log.Printf("consumer for topic %s failed: %v", topic, err)
 		time.Sleep(3 * time.Second)
 	}

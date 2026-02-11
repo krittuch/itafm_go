@@ -1,13 +1,20 @@
 package com.aerothai.itafm.broker;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.jms.BytesMessage;
 import javax.jms.Connection;
@@ -25,6 +32,9 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
 
 public final class ActiveMqKafkaBridgeApp {
     private static final Duration RETRY_DELAY = Duration.ofSeconds(3);
@@ -56,19 +66,29 @@ public final class ActiveMqKafkaBridgeApp {
             )
         );
 
+        Map<String, RouteStats> routeStats = new LinkedHashMap<>();
+        for (RouteConfig route : routes) {
+            routeStats.put(route.label, new RouteStats(route));
+        }
+
+        HttpServer monitorServer = startMonitorServer(config, routeStats);
         KafkaProducer<String, byte[]> producer = new KafkaProducer<>(config.kafkaProperties());
         ExecutorService executor = Executors.newFixedThreadPool(routes.size());
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             running = false;
             System.out.println("Shutting down ActiveMQ -> Kafka broker...");
+            if (monitorServer != null) {
+                monitorServer.stop(1);
+            }
             executor.shutdownNow();
             producer.flush();
             producer.close(Duration.ofSeconds(10));
         }));
 
         for (RouteConfig route : routes) {
-            executor.submit(() -> consumeForever(config, route, producer));
+            RouteStats stats = routeStats.get(route.label);
+            executor.submit(() -> consumeForever(config, stats, producer));
         }
 
         try {
@@ -78,7 +98,8 @@ public final class ActiveMqKafkaBridgeApp {
         }
     }
 
-    private static void consumeForever(BridgeConfig config, RouteConfig route, KafkaProducer<String, byte[]> producer) {
+    private static void consumeForever(BridgeConfig config, RouteStats routeStats, KafkaProducer<String, byte[]> producer) {
+        RouteConfig route = routeStats.route;
         while (running && !Thread.currentThread().isInterrupted()) {
             Connection connection = null;
             Session session = null;
@@ -107,21 +128,25 @@ public final class ActiveMqKafkaBridgeApp {
                     route.destinationName,
                     route.kafkaTopic
                 );
+                routeStats.markOnline();
 
                 while (running && !Thread.currentThread().isInterrupted()) {
                     Message message = consumer.receive(1000L);
                     if (message == null) {
                         continue;
                     }
+                    routeStats.recordReceived();
 
                     byte[] payload = extractPayload(message);
                     if (payload.length == 0) {
+                        routeStats.recordEmptyPayload();
                         message.acknowledge();
                         continue;
                     }
 
                     ProducerRecord<String, byte[]> record = new ProducerRecord<>(route.kafkaTopic, payload);
                     RecordMetadata metadata = producer.send(record).get();
+                    routeStats.recordForward(metadata, payload.length);
                     message.acknowledge();
 
                     if (metadata.offset() % 500 == 0) {
@@ -134,14 +159,156 @@ public final class ActiveMqKafkaBridgeApp {
                     }
                 }
             } catch (Exception ex) {
+                routeStats.recordError(ex);
                 System.err.printf("Route %s failed: %s%n", route.label, ex.getMessage());
                 sleep(RETRY_DELAY);
             } finally {
                 closeQuietly(consumer);
                 closeQuietly(session);
                 closeQuietly(connection);
+                routeStats.markOffline();
             }
         }
+    }
+
+    private static HttpServer startMonitorServer(BridgeConfig config, Map<String, RouteStats> routeStats) {
+        if (!config.monitorEnabled) {
+            return null;
+        }
+
+        try {
+            HttpServer server = HttpServer.create(new InetSocketAddress(config.monitorHost, config.monitorPort), 0);
+            server.createContext("/", exchange -> writeText(exchange, 200,
+                "ActiveMQ Kafka broker monitor\n\nGET /health\nGET /routes\n"));
+            server.createContext("/health", exchange -> writeJson(exchange, 200, renderHealth(routeStats)));
+            server.createContext("/routes", exchange -> writeJson(exchange, 200, renderRoutes(routeStats)));
+            server.start();
+            System.out.printf("Monitor online at http://%s:%d%n", config.monitorHost, config.monitorPort);
+            return server;
+        } catch (IOException ex) {
+            System.err.printf(
+                "Monitor server failed to start at %s:%d: %s%n",
+                config.monitorHost,
+                config.monitorPort,
+                ex.getMessage()
+            );
+            return null;
+        }
+    }
+
+    private static String renderHealth(Map<String, RouteStats> routeStats) {
+        long onlineCount = 0L;
+        for (RouteStats stats : routeStats.values()) {
+            if (stats.online) {
+                onlineCount += 1L;
+            }
+        }
+
+        return new StringBuilder(128)
+            .append("{\"status\":\"ok\",\"running\":")
+            .append(running)
+            .append(",\"route_count\":")
+            .append(routeStats.size())
+            .append(",\"online_routes\":")
+            .append(onlineCount)
+            .append(",\"timestamp\":\"")
+            .append(Instant.now())
+            .append("\"}")
+            .toString();
+    }
+
+    private static String renderRoutes(Map<String, RouteStats> routeStats) {
+        StringBuilder json = new StringBuilder(2048);
+        json.append("{\"running\":")
+            .append(running)
+            .append(",\"timestamp\":\"")
+            .append(Instant.now())
+            .append("\",\"routes\":[");
+
+        boolean first = true;
+        for (RouteStats stats : routeStats.values()) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            stats.appendJson(json);
+        }
+        json.append("]}");
+        return json.toString();
+    }
+
+    private static void writeJson(HttpExchange exchange, int status, String body) throws IOException {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            writeText(exchange, 405, "method not allowed\n");
+            return;
+        }
+
+        byte[] payload = body.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        exchange.sendResponseHeaders(status, payload.length);
+        try (OutputStream responseBody = exchange.getResponseBody()) {
+            responseBody.write(payload);
+        }
+    }
+
+    private static void writeText(HttpExchange exchange, int status, String body) throws IOException {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            status = 405;
+            body = "method not allowed\n";
+        }
+
+        byte[] payload = body.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+        exchange.sendResponseHeaders(status, payload.length);
+        try (OutputStream responseBody = exchange.getResponseBody()) {
+            responseBody.write(payload);
+        }
+    }
+
+    private static String quoteJson(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        StringBuilder escaped = new StringBuilder(value.length() + 16);
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            switch (ch) {
+                case '\\':
+                case '"':
+                    escaped.append('\\').append(ch);
+                    break;
+                case '\b':
+                    escaped.append("\\b");
+                    break;
+                case '\f':
+                    escaped.append("\\f");
+                    break;
+                case '\n':
+                    escaped.append("\\n");
+                    break;
+                case '\r':
+                    escaped.append("\\r");
+                    break;
+                case '\t':
+                    escaped.append("\\t");
+                    break;
+                default:
+                    if (ch < 0x20) {
+                        escaped.append(String.format("\\u%04x", (int) ch));
+                    } else {
+                        escaped.append(ch);
+                    }
+            }
+        }
+        return escaped.toString();
+    }
+
+    private static String formatEpoch(long value) {
+        if (value <= 0L) {
+            return "";
+        }
+        return Instant.ofEpochMilli(value).toString();
     }
 
     private static byte[] extractPayload(Message message) throws JMSException {
@@ -222,6 +389,18 @@ public final class ActiveMqKafkaBridgeApp {
         return value.trim();
     }
 
+    private static int readIntEnv(String key, int fallback) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException ex) {
+            return fallback;
+        }
+    }
+
     private enum DestinationKind {
         QUEUE,
         TOPIC
@@ -264,25 +443,120 @@ public final class ActiveMqKafkaBridgeApp {
         }
     }
 
+    private static final class RouteStats {
+        private final RouteConfig route;
+        private final long startedAt = System.currentTimeMillis();
+        private final AtomicLong receivedCount = new AtomicLong(0L);
+        private final AtomicLong forwardedCount = new AtomicLong(0L);
+        private final AtomicLong emptyPayloadCount = new AtomicLong(0L);
+        private final AtomicLong errorCount = new AtomicLong(0L);
+        private final AtomicLong totalForwardedBytes = new AtomicLong(0L);
+        private final AtomicLong lastReceivedAt = new AtomicLong(0L);
+        private final AtomicLong lastForwardedAt = new AtomicLong(0L);
+        private final AtomicLong lastOffset = new AtomicLong(-1L);
+        private final AtomicLong lastPartition = new AtomicLong(-1L);
+
+        private volatile boolean online = false;
+        private volatile String lastError = "";
+
+        private RouteStats(RouteConfig route) {
+            this.route = route;
+        }
+
+        private void markOnline() {
+            this.online = true;
+        }
+
+        private void markOffline() {
+            this.online = false;
+        }
+
+        private void recordReceived() {
+            receivedCount.incrementAndGet();
+            lastReceivedAt.set(System.currentTimeMillis());
+        }
+
+        private void recordEmptyPayload() {
+            emptyPayloadCount.incrementAndGet();
+        }
+
+        private void recordForward(RecordMetadata metadata, int payloadBytes) {
+            forwardedCount.incrementAndGet();
+            totalForwardedBytes.addAndGet(payloadBytes);
+            lastForwardedAt.set(System.currentTimeMillis());
+            lastOffset.set(metadata.offset());
+            lastPartition.set(metadata.partition());
+            lastError = "";
+        }
+
+        private void recordError(Exception exception) {
+            errorCount.incrementAndGet();
+            lastError = exception == null ? "" : Objects.toString(exception.getMessage(), "");
+        }
+
+        private void appendJson(StringBuilder json) {
+            json.append("{\"label\":\"")
+                .append(quoteJson(route.label))
+                .append("\",\"active_mq\":\"")
+                .append(quoteJson(route.kind.name().toLowerCase() + ":" + route.destinationName))
+                .append("\",\"kafka_topic\":\"")
+                .append(quoteJson(route.kafkaTopic))
+                .append("\",\"online\":")
+                .append(online)
+                .append(",\"received_count\":")
+                .append(receivedCount.get())
+                .append(",\"forwarded_count\":")
+                .append(forwardedCount.get())
+                .append(",\"empty_payload_count\":")
+                .append(emptyPayloadCount.get())
+                .append(",\"error_count\":")
+                .append(errorCount.get())
+                .append(",\"forwarded_bytes\":")
+                .append(totalForwardedBytes.get())
+                .append(",\"last_offset\":")
+                .append(lastOffset.get())
+                .append(",\"last_partition\":")
+                .append(lastPartition.get())
+                .append(",\"started_at\":\"")
+                .append(formatEpoch(startedAt))
+                .append("\",\"last_received_at\":\"")
+                .append(formatEpoch(lastReceivedAt.get()))
+                .append("\",\"last_forwarded_at\":\"")
+                .append(formatEpoch(lastForwardedAt.get()))
+                .append("\",\"last_error\":\"")
+                .append(quoteJson(lastError))
+                .append("\"}");
+        }
+    }
+
     private static final class BridgeConfig {
         private final String activeMqBrokerUrl;
         private final String activeMqUser;
         private final String activeMqPassword;
         private final String kafkaBrokers;
         private final String kafkaClientId;
+        private final boolean monitorEnabled;
+        private final String monitorHost;
+        private final int monitorPort;
 
         private BridgeConfig(
             String activeMqBrokerUrl,
             String activeMqUser,
             String activeMqPassword,
             String kafkaBrokers,
-            String kafkaClientId
+            String kafkaClientId,
+            boolean monitorEnabled,
+            String monitorHost,
+            int monitorPort
         ) {
             this.activeMqBrokerUrl = activeMqBrokerUrl;
             this.activeMqUser = activeMqUser;
             this.activeMqPassword = activeMqPassword;
             this.kafkaBrokers = kafkaBrokers;
             this.kafkaClientId = kafkaClientId;
+            this.monitorEnabled = monitorEnabled;
+            this.monitorHost = monitorHost;
+            this.monitorPort = monitorPort;
         }
 
         private static BridgeConfig fromEnv() {
@@ -295,7 +569,10 @@ public final class ActiveMqKafkaBridgeApp {
                 readEnv("MQTT_USER", ""),
                 readEnv("MQTT_PASSWORD", ""),
                 readEnv("KAFKA_BROKERS", "localhost:9092"),
-                readEnv("KAFKA_CLIENT_ID", "itafm-amq-kafka-broker")
+                readEnv("KAFKA_CLIENT_ID", "itafm-amq-kafka-broker"),
+                Boolean.parseBoolean(readEnv("MONITOR_ENABLED", "true")),
+                readEnv("MONITOR_HOST", "0.0.0.0"),
+                readIntEnv("MONITOR_PORT", 18080)
             );
         }
 

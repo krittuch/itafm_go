@@ -8,28 +8,30 @@ import (
 	"aerothai/itafm/model"
 )
 
-func onSurveillanceReceive(body []byte, surveillanceController *controller.SurveillanceController) {
+func onSurveillanceReceive(body []byte, surveillanceController *controller.SurveillanceController) bool {
 
 	survData := model.AODSSurveillance{}
 	err := json.Unmarshal(body, &survData)
 
 	if err != nil {
 		log.Println(err)
-		return
+		return false
 	}
 
 	if survData.Departure != "VTBS" && survData.Destination != "VTBS" {
-		return
+		return false
 	}
 
 	success := false
 	survData.CallSign, success = ConvertToIATA(survData.CallSign)
 
 	if !success {
-		return
+		return false
 	}
 
 	if !surveillanceController.InsertOrUpdateSurveillance(&survData) {
 		log.Println("failed to insert/update surveillance record")
+		return false
 	}
+	return true
 }
