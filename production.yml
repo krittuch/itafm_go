@@ -1,7 +1,7 @@
 services:
-  kafka:
+  itafm_kafka:
     image: redpandadata/redpanda:v24.2.9
-    container_name: itafm_kafka_prod
+    container_name: itafm_kafka
     restart: always
     ports:
       - "9099:9092"
@@ -29,7 +29,7 @@ services:
       - ./.envs/.production/.mqtt
       - ./.envs/.production/.kafka
     depends_on:
-      - kafka
+      - itafm_kafka
     network_mode: host
 
   gateway:
@@ -43,7 +43,7 @@ services:
       - ./.envs/.production/.mqtt
       - ./.envs/.production/.kafka
     depends_on:
-      - kafka
+      - itafm_kafka
       - java_broker
     volumes:
       - .:/usr/src/app/
