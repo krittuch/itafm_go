@@ -7,26 +7,30 @@ import (
 )
 
 type stackConfig struct {
-	name         string
-	composeFile  string
-	kafkaEnvFile string
+	name             string
+	composeFile      string
+	kafkaEnvFile     string
+	kafkaServiceName string
 }
 
 var stackConfigs = []stackConfig{
 	{
-		name:         "production",
-		composeFile:  "production.yml",
-		kafkaEnvFile: ".envs/.production/.kafka",
+		name:             "production",
+		composeFile:      "production.yml",
+		kafkaEnvFile:     ".envs/.production/.kafka",
+		kafkaServiceName: "itafm_kafka",
 	},
 	{
-		name:         "development",
-		composeFile:  "development.yml",
-		kafkaEnvFile: ".envs/.development/.kafka",
+		name:             "development",
+		composeFile:      "development.yml",
+		kafkaEnvFile:     ".envs/.development/.kafka",
+		kafkaServiceName: "itafm_kafka",
 	},
 	{
-		name:         "local",
-		composeFile:  "local.yml",
-		kafkaEnvFile: ".envs/.local/.kafka",
+		name:             "local",
+		composeFile:      "local.yml",
+		kafkaEnvFile:     ".envs/.local/.kafka",
+		kafkaServiceName: "kafka",
 	},
 }
 
@@ -35,7 +39,7 @@ func TestKafkaServiceUsesHostPort9099(t *testing.T) {
 		stack := stack
 		t.Run(stack.name, func(t *testing.T) {
 			composeContent := readFile(t, stack.composeFile)
-			kafkaService := serviceBlock(t, composeContent, "kafka")
+			kafkaService := serviceBlock(t, composeContent, stack.kafkaServiceName)
 
 			mustContain(t, kafkaService, "- \"9099:9092\"")
 			mustContain(t, kafkaService, "--kafka-addr=PLAINTEXT://0.0.0.0:9092")

@@ -1,7 +1,7 @@
 version: "3"
 
 services:
-  kafka:
+  itafm_kafka:
     image: redpandadata/redpanda:v24.2.9
     container_name: itafm_kafka_dev
     restart: always
@@ -31,7 +31,7 @@ services:
       - ./.envs/.development/.mqtt
       - ./.envs/.development/.kafka
     depends_on:
-      - kafka
+      - itafm_kafka
     network_mode: host
 
   gateway:
@@ -45,7 +45,7 @@ services:
       - ./.envs/.development/.mqtt
       - ./.envs/.development/.kafka
     depends_on:
-      - kafka
+      - itafm_kafka
       - java_broker
     volumes:
       - .:/usr/src/app/
