@@ -192,6 +192,20 @@ func TestMockupTopicPayloads(t *testing.T) {
 		if surv.CallSign == "" {
 			t.Fatal("expected surveillance callsign")
 		}
+		if surv.DateTime == "" {
+			t.Fatal("expected surveillance datetime from legacy dt field")
+		}
+	})
+
+	t.Run("surveillance payload accepts datetime field", func(t *testing.T) {
+		payload := []byte(`{"CallSign":"BAV73","Dep":"VTBS","Dest":"VHHH","datetime":"2026-02-18T11:11:11Z"}`)
+		var surv model.AODSSurveillance
+		if err := json.Unmarshal(payload, &surv); err != nil {
+			t.Fatalf("unexpected unmarshal error: %v", err)
+		}
+		if surv.DateTime != "2026-02-18T11:11:11Z" {
+			t.Fatalf("unexpected datetime value: got=%q", surv.DateTime)
+		}
 	})
 
 	t.Run("idep payload matches IDEP model", func(t *testing.T) {
