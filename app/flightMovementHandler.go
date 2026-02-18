@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	mqtt "github.com/eclipse/paho.mqtt.golang"
-
 	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
 )
@@ -18,19 +16,17 @@ import (
 func onFPLReceive(
 	body []byte,
 	db *sql.DB,
-	flightController *controller.FlightController,
-	client mqtt.Client) {
+	flightController *controller.FlightController) bool {
 	fplData := model.FlightPlan{}
 	err := json.Unmarshal(body, &fplData)
 	if err != nil {
 		log.Println(err)
-		return
+		return false
 	}
 
 	r, err2 := regexp.Compile(`(DOF\/)\w+`)
 
 	if err2 == nil {
-		// log.Println(r.FindString(data.ITEM18))
 		dof := r.FindString(fplData.ITEM18)
 		fplData.DOF = strings.Replace(dof, `DOF/`, "", 1)
 	} else {
@@ -42,7 +38,6 @@ func onFPLReceive(
 	register := ""
 
 	if err3 == nil {
-		// log.Println(r.FindString(data.ITEM18))
 		register = regex.FindString(fplData.ITEM18)
 		register = strings.Replace(register, `REG/`, "", 1)
 	} else {
@@ -62,14 +57,14 @@ func onFPLReceive(
 	iata, success := ConvertToIATA(icaoCode)
 
 	if !success {
-		return
+		return false
 	}
 
 	numberRegex := regexp.MustCompile(`\d+`)
 	matchString := numberRegex.FindString(fplData.CALLSIGN)
 	if len(matchString) <= 0 {
 		log.Println("Cannot find number in ", fplData.CALLSIGN)
-		return
+		return false
 	}
 
 	flightNumber := strings.TrimLeft(matchString, "0")
@@ -103,21 +98,18 @@ func onFPLReceive(
 		}
 	}
 
-	sendToITAFM(client, "server/trigger/flight/"+postFlight.FlightNumber, "")
-
+	return true
 }
 
 func onCMDReceive(
 	body []byte,
 	db *sql.DB,
-	flightController *controller.FlightController,
-	client mqtt.Client) {
+	flightController *controller.FlightController) bool {
 	fmvData := model.AODSFlightMovement{}
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
 		log.Println(err)
-		log.Println(string(body))
-		return
+		return false
 	}
 
 	// Change icao to iata
@@ -130,7 +122,7 @@ func onCMDReceive(
 	airline, errAirline := airlineController.GetAirline(icaoCode)
 
 	if errAirline != nil {
-		return
+		return false
 	}
 
 	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
@@ -145,7 +137,7 @@ func onCMDReceive(
 		dateOfFlight = strings.Join([]string{"20", fmvData.DOF}, "")
 		if len(dateOfFlight) < 4 {
 			log.Println("Error DEP CMD", dateOfFlight)
-			return
+			return false
 		}
 		dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
 		std = strings.Join([]string{dateOfFlight, " ", timeStr[:2], ":", timeStr[2:4], ":00+00"}, "")
@@ -162,7 +154,7 @@ func onCMDReceive(
 			timeStr[2:4], ":00+00",
 		}, "")
 	} else {
-		return
+		return false
 	}
 
 	if fmvData.CMD == "DEP" {
@@ -171,7 +163,7 @@ func onCMDReceive(
 		flightController.UpdateArrivalFlight(flightNumber, fmvData.DOF, std)
 	}
 
-	sendToITAFM(client, "server/trigger/flight/"+flightNumber, "")
+	return true
 }
 
 func onCNLReceive(
@@ -182,7 +174,6 @@ func onCNLReceive(
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
 		log.Println(err)
-		log.Println(string(body))
 		return
 	}
 
@@ -190,18 +181,9 @@ func onCNLReceive(
 
 	airlineController := controller.NewAirlineController(db)
 
-	airline, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3])
-
-	if errAirline != nil {
-		log.Println("Could not find airline")
-		log.Println(errAirline)
+	if _, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3]); errAirline != nil {
 		return
 	}
-
-	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
-
-	log.Println(string(body))
-	log.Println(flightNumber)
 
 	// Create ATD
 	// dateOfFlight := ""
@@ -218,7 +200,6 @@ func onDLYReceive(
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
 		log.Println(err)
-		log.Println(string(body))
 		return
 	}
 
@@ -226,18 +207,9 @@ func onDLYReceive(
 
 	airlineController := controller.NewAirlineController(db)
 
-	airline, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3])
-
-	if errAirline != nil {
-		log.Println("Could not find airline")
-		log.Println(errAirline)
+	if _, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3]); errAirline != nil {
 		return
 	}
-
-	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
-
-	log.Println(string(body))
-	log.Println(flightNumber)
 
 }
 
@@ -249,21 +221,12 @@ func onCHGReceive(
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
 		log.Println(err)
-		log.Println(string(body))
 		return
 	}
 
 	airlineController := controller.NewAirlineController(db)
 
-	airline, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3])
-	if errAirline != nil {
-		log.Println("Could not find airline")
-		log.Println(errAirline)
+	if _, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3]); errAirline != nil {
 		return
 	}
-
-	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
-
-	log.Println(string(body))
-	log.Println(flightNumber)
 }

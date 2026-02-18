@@ -3,7 +3,7 @@ version: "3"
 services:
   itafm_kafka:
     image: redpandadata/redpanda:v24.2.9
-    container_name: itafm_kafka_dev
+    container_name: itafm_kafka
     restart: always
     ports:
       - "9099:9092"
