@@ -34,6 +34,10 @@ func initITAFM() mqtt.Client {
 }
 
 func sendToITAFM(client mqtt.Client, topic string, text string) {
+	if client == nil || !client.IsConnected() {
+		return
+	}
+
 	token := client.Publish(topic, 0, false, text)
 
 	if token.Wait() && token.Error() != nil {

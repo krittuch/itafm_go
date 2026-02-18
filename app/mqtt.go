@@ -35,13 +35,16 @@ func StartConsumeKafka(a *App) {
 	loadAirlineReference()
 	flag.Parse()
 
-	client := initITAFM()
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		log.Println(token.Error())
-		return
+	var client mqtt.Client
+	if isITAFMMQTTDisabled() {
+		log.Println("ITAFM MQTT disabled via DISABLE_ITAFM_MQTT")
+	} else {
+		client = initITAFM()
+		if token := client.Connect(); token.Wait() && token.Error() != nil {
+			log.Printf("unable to connect to iTAFM MQTT (%s:%s): %v; continuing without MQTT publishing", ITAFM_MQTT_IP_ADDRESS, ITAFM_MQTT_PORT, token.Error())
+			client = nil
+		}
 	}
-
-	log.Println("Connected to iTAFM")
 
 	brokers := splitBrokers(*kafkaBrokers)
 	if len(brokers) == 0 {
@@ -164,6 +167,16 @@ func splitBrokers(raw string) []string {
 		}
 	}
 	return brokers
+}
+
+func isITAFMMQTTDisabled() bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv("DISABLE_ITAFM_MQTT")))
+	switch value {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func splitFlightPayloadRecords(payload []byte) ([][]byte, error) {
