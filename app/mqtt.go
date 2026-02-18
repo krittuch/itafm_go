@@ -9,6 +9,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,10 +64,19 @@ func loadAirlineReference() {
 }
 
 func consumeSurveillanceStream(brokers []string, groupID string, topic string, db *sql.DB, monitor *gatewayRouteMonitor) {
+	survController := controller.NewSurveillanceController(db)
+	batchInterval := getSurveillanceDBBatchInterval()
+	maxBatchSize := getSurveillanceDBBatchMaxSize()
+	log.Printf(
+		"surveillance writes are buffered: flush interval=%s max batch size=%d",
+		batchInterval,
+		maxBatchSize,
+	)
+	survBatcher := newSurveillanceBatcher(survController, batchInterval, maxBatchSize)
+
 	runKafkaConsumerLoop(brokers, groupID, topic, monitor, func(value []byte) {
 		monitor.RecordReceived()
-		survController := controller.NewSurveillanceController(db)
-		if onSurveillanceReceive(value, survController) {
+		if onSurveillanceReceive(value, survBatcher) {
 			monitor.RecordProcessed()
 		} else {
 			monitor.RecordSkipped()
@@ -189,6 +199,58 @@ func splitBrokers(raw string) []string {
 		}
 	}
 	return brokers
+}
+
+func getSurveillanceDBBatchInterval() time.Duration {
+	const defaultBatchInterval = 5 * time.Second
+
+	raw := strings.TrimSpace(os.Getenv("SURVEILLANCE_DB_BATCH_INTERVAL"))
+	if raw == "" {
+		return defaultBatchInterval
+	}
+
+	batchInterval, err := time.ParseDuration(raw)
+	if err != nil {
+		log.Printf(
+			"invalid SURVEILLANCE_DB_BATCH_INTERVAL %q: %v (using default %s)",
+			raw,
+			err,
+			defaultBatchInterval,
+		)
+		return defaultBatchInterval
+	}
+
+	if batchInterval < 0 {
+		log.Printf(
+			"invalid SURVEILLANCE_DB_BATCH_INTERVAL %q: must not be negative (using default %s)",
+			raw,
+			defaultBatchInterval,
+		)
+		return defaultBatchInterval
+	}
+
+	return batchInterval
+}
+
+func getSurveillanceDBBatchMaxSize() int {
+	const defaultMaxBatchSize = 200
+
+	raw := strings.TrimSpace(os.Getenv("SURVEILLANCE_DB_BATCH_MAX_SIZE"))
+	if raw == "" {
+		return defaultMaxBatchSize
+	}
+
+	maxBatchSize, err := strconv.Atoi(raw)
+	if err != nil || maxBatchSize <= 0 {
+		log.Printf(
+			"invalid SURVEILLANCE_DB_BATCH_MAX_SIZE %q (using default %d)",
+			raw,
+			defaultMaxBatchSize,
+		)
+		return defaultMaxBatchSize
+	}
+
+	return maxBatchSize
 }
 
 func splitFlightPayloadRecords(payload []byte) ([][]byte, error) {

@@ -73,6 +73,8 @@ Key route fields:
 - `GATEWAY_MONITOR_ENABLED` (default: `true`)
 - `GATEWAY_MONITOR_HOST` (default: `0.0.0.0`)
 - `GATEWAY_MONITOR_PORT` (default: `18081`)
+- `SURVEILLANCE_DB_BATCH_INTERVAL` (default: `5s`).
+- `SURVEILLANCE_DB_BATCH_MAX_SIZE` (default: `200`).
 
 ## Quick debug workflow
 

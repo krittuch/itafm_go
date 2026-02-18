@@ -9,6 +9,7 @@ import (
 
 type SurveillanceInterface interface {
 	InsertOrUpdateSurveillance(*model.AODSSurveillance) bool
+	InsertOrUpdateSurveillanceBatch([]*model.AODSSurveillance) bool
 }
 
 type SurveillanceController struct {
@@ -24,4 +25,9 @@ func NewSurveillanceController(db *sql.DB) *SurveillanceController {
 func (s *SurveillanceController) InsertOrUpdateSurveillance(surveillance *model.AODSSurveillance) bool {
 	repo := repository.NewSurveillanceRepository(s.DB)
 	return repo.InsertOrUpdateSurveillance(surveillance)
+}
+
+func (s *SurveillanceController) InsertOrUpdateSurveillanceBatch(surveillance []*model.AODSSurveillance) bool {
+	repo := repository.NewSurveillanceRepository(s.DB)
+	return repo.InsertOrUpdateSurveillanceBatch(surveillance)
 }

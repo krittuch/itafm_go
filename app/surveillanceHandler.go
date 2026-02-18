@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"log"
 
-	"aerothai/itafm/controller"
 	"aerothai/itafm/model"
 )
 
-func onSurveillanceReceive(body []byte, surveillanceController *controller.SurveillanceController) bool {
+func onSurveillanceReceive(body []byte, batcher *surveillanceBatcher) bool {
 
 	survData := model.AODSSurveillance{}
 	err := json.Unmarshal(body, &survData)
@@ -29,8 +28,12 @@ func onSurveillanceReceive(body []byte, surveillanceController *controller.Surve
 		return false
 	}
 
-	if !surveillanceController.InsertOrUpdateSurveillance(&survData) {
-		log.Println("failed to insert/update surveillance record")
+	if batcher == nil {
+		log.Println("surveillance batcher is nil")
+		return false
+	}
+
+	if !batcher.add(&survData) {
 		return false
 	}
 	return true
