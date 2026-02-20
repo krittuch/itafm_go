@@ -85,9 +85,33 @@ func TestSurveillanceBatcherFlushOnMaxSize(t *testing.T) {
 	}
 }
 
+func TestSurveillanceBatcherSkipsAlreadyFlushedDateTime(t *testing.T) {
+	writer := &fakeSurveillanceBatchWriter{success: true}
+	batcher := newSurveillanceBatcher(writer, time.Hour, 100)
+	defer batcher.close()
+
+	batcher.add(&model.AODSSurveillance{CallSign: "TG123", DateTime: "2026-02-18T10:00:00Z"})
+	batcher.flush()
+	if len(writer.batches) != 1 {
+		t.Fatalf("expected first flush, got %d batches", len(writer.batches))
+	}
+
+	batcher.add(&model.AODSSurveillance{CallSign: "TG123", DateTime: "2026-02-18T10:00:00Z"})
+	batcher.flush()
+	if len(writer.batches) != 1 {
+		t.Fatalf("expected duplicate datetime to be skipped, got %d batches", len(writer.batches))
+	}
+
+	batcher.add(&model.AODSSurveillance{CallSign: "TG123", DateTime: "2026-02-18T10:00:01Z"})
+	batcher.flush()
+	if len(writer.batches) != 2 {
+		t.Fatalf("expected new datetime to flush, got %d batches", len(writer.batches))
+	}
+}
+
 func TestGetSurveillanceDBBatchInterval(t *testing.T) {
 	t.Setenv("SURVEILLANCE_DB_BATCH_INTERVAL", "")
-	if got := getSurveillanceDBBatchInterval(); got != 5*time.Second {
+	if got := getSurveillanceDBBatchInterval(); got != 10*time.Second {
 		t.Fatalf("expected default interval for empty env, got %s", got)
 	}
 
@@ -97,19 +121,19 @@ func TestGetSurveillanceDBBatchInterval(t *testing.T) {
 	}
 
 	t.Setenv("SURVEILLANCE_DB_BATCH_INTERVAL", "invalid")
-	if got := getSurveillanceDBBatchInterval(); got != 5*time.Second {
+	if got := getSurveillanceDBBatchInterval(); got != 10*time.Second {
 		t.Fatalf("expected default interval for invalid env, got %s", got)
 	}
 
 	t.Setenv("SURVEILLANCE_DB_BATCH_INTERVAL", "-1s")
-	if got := getSurveillanceDBBatchInterval(); got != 5*time.Second {
+	if got := getSurveillanceDBBatchInterval(); got != 10*time.Second {
 		t.Fatalf("expected default interval for negative env, got %s", got)
 	}
 }
 
 func TestGetSurveillanceDBBatchMaxSize(t *testing.T) {
 	t.Setenv("SURVEILLANCE_DB_BATCH_MAX_SIZE", "")
-	if got := getSurveillanceDBBatchMaxSize(); got != 200 {
+	if got := getSurveillanceDBBatchMaxSize(); got != 500 {
 		t.Fatalf("expected default batch size for empty env, got %d", got)
 	}
 
@@ -119,12 +143,12 @@ func TestGetSurveillanceDBBatchMaxSize(t *testing.T) {
 	}
 
 	t.Setenv("SURVEILLANCE_DB_BATCH_MAX_SIZE", "invalid")
-	if got := getSurveillanceDBBatchMaxSize(); got != 200 {
+	if got := getSurveillanceDBBatchMaxSize(); got != 500 {
 		t.Fatalf("expected default batch size for invalid env, got %d", got)
 	}
 
 	t.Setenv("SURVEILLANCE_DB_BATCH_MAX_SIZE", "-10")
-	if got := getSurveillanceDBBatchMaxSize(); got != 200 {
+	if got := getSurveillanceDBBatchMaxSize(); got != 500 {
 		t.Fatalf("expected default batch size for negative env, got %d", got)
 	}
 }

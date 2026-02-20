@@ -202,7 +202,7 @@ func splitBrokers(raw string) []string {
 }
 
 func getSurveillanceDBBatchInterval() time.Duration {
-	const defaultBatchInterval = 5 * time.Second
+	const defaultBatchInterval = 10 * time.Second
 
 	raw := strings.TrimSpace(os.Getenv("SURVEILLANCE_DB_BATCH_INTERVAL"))
 	if raw == "" {
@@ -233,7 +233,7 @@ func getSurveillanceDBBatchInterval() time.Duration {
 }
 
 func getSurveillanceDBBatchMaxSize() int {
-	const defaultMaxBatchSize = 200
+	const defaultMaxBatchSize = 500
 
 	raw := strings.TrimSpace(os.Getenv("SURVEILLANCE_DB_BATCH_MAX_SIZE"))
 	if raw == "" {

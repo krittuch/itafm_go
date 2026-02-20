@@ -4,3 +4,5 @@ KAFKA_FLIGHT_TOPIC=itafm.flight_movement
 KAFKA_IDEP_TOPIC=itafm.idep
 KAFKA_SURV_TOPIC=itafm.surveillance
 KAFKA_CLIENT_ID=itafm-amq-kafka-broker-prod
+SURVEILLANCE_DB_BATCH_INTERVAL=10s
+SURVEILLANCE_DB_BATCH_MAX_SIZE=500
