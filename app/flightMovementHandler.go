@@ -181,15 +181,24 @@ func onCNLReceive(
 
 	airlineController := controller.NewAirlineController(db)
 
-	if _, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3]); errAirline != nil {
+	airlineCodeRegex := regexp.MustCompile(`^[A-Z]{3}`)
+	icaoCode := airlineCodeRegex.FindString(fmvData.CALLSIGN)
+
+	airline, errAirline := airlineController.GetAirline(icaoCode)
+	if errAirline != nil {
 		return
 	}
 
-	// Create ATD
-	// dateOfFlight := ""
-	// timeStr := ""
+	if len(fmvData.TIME1) < 4 || len(fmvData.DOF) < 6 {
+		return
+	}
 
-	// flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, dateOfFlight)
+	dateOfFlight := "20" + fmvData.DOF
+	dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
+	std := strings.Join([]string{dateOfFlight, " ", fmvData.TIME1[:2], ":", fmvData.TIME1[2:4], ":00+00"}, "")
+	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
+
+	flightController.UpdateCanceledFlight(flightNumber, std)
 }
 
 func onDLYReceive(
@@ -207,10 +216,24 @@ func onDLYReceive(
 
 	airlineController := controller.NewAirlineController(db)
 
-	if _, errAirline := airlineController.GetAirline(fmvData.CALLSIGN[:3]); errAirline != nil {
+	airlineCodeRegex := regexp.MustCompile(`^[A-Z]{3}`)
+	icaoCode := airlineCodeRegex.FindString(fmvData.CALLSIGN)
+
+	airline, errAirline := airlineController.GetAirline(icaoCode)
+	if errAirline != nil {
 		return
 	}
 
+	if len(fmvData.TIME1) < 4 || len(fmvData.DOF) < 6 {
+		return
+	}
+
+	dateOfFlight := "20" + fmvData.DOF
+	dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
+	std := strings.Join([]string{dateOfFlight, " ", fmvData.TIME1[:2], ":", fmvData.TIME1[2:4], ":00+00"}, "")
+	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
+
+	flightController.UpdateDelayedFlight(flightNumber, std)
 }
 
 func onCHGReceive(

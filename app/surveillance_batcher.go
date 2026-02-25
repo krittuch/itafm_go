@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -19,7 +20,7 @@ type surveillanceBatcher struct {
 
 	mu                  sync.Mutex
 	pending             map[string]*model.AODSSurveillance
-	lastFlushedDateTime map[string]string
+	lastFlushedSignature map[string]string
 
 	stopCh chan struct{}
 }
@@ -37,12 +38,12 @@ func newSurveillanceBatcher(
 	}
 
 	batcher := &surveillanceBatcher{
-		writer:              writer,
-		flushTicker:         time.NewTicker(flushInterval),
-		maxBatchSize:        maxBatchSize,
-		pending:             map[string]*model.AODSSurveillance{},
-		lastFlushedDateTime: map[string]string{},
-		stopCh:              make(chan struct{}),
+		writer:               writer,
+		flushTicker:          time.NewTicker(flushInterval),
+		maxBatchSize:         maxBatchSize,
+		pending:              map[string]*model.AODSSurveillance{},
+		lastFlushedSignature: map[string]string{},
+		stopCh:               make(chan struct{}),
 	}
 
 	go batcher.run()
@@ -89,15 +90,13 @@ func (b *surveillanceBatcher) add(surv *model.AODSSurveillance) bool {
 }
 
 func (b *surveillanceBatcher) shouldSkipLocked(surv *model.AODSSurveillance) bool {
-	if surv.DateTime == "" {
-		return false
-	}
+	signature := surveillanceSignature(surv)
 
-	if pending, exists := b.pending[surv.CallSign]; exists && pending.DateTime == surv.DateTime {
+	if pending, exists := b.pending[surv.CallSign]; exists && surveillanceSignature(pending) == signature {
 		return true
 	}
 
-	if flushedDateTime, exists := b.lastFlushedDateTime[surv.CallSign]; exists && flushedDateTime == surv.DateTime {
+	if flushedSignature, exists := b.lastFlushedSignature[surv.CallSign]; exists && flushedSignature == signature {
 		return true
 	}
 
@@ -124,10 +123,10 @@ func (b *surveillanceBatcher) markFlushed(batch []*model.AODSSurveillance) {
 	defer b.mu.Unlock()
 
 	for _, surv := range batch {
-		if surv == nil || surv.CallSign == "" || surv.DateTime == "" {
+		if surv == nil || surv.CallSign == "" {
 			continue
 		}
-		b.lastFlushedDateTime[surv.CallSign] = surv.DateTime
+		b.lastFlushedSignature[surv.CallSign] = surveillanceSignature(surv)
 	}
 }
 
@@ -146,6 +145,35 @@ func (b *surveillanceBatcher) drain() []*model.AODSSurveillance {
 	b.pending = map[string]*model.AODSSurveillance{}
 
 	return batch
+}
+
+func surveillanceSignature(surv *model.AODSSurveillance) string {
+	if surv == nil {
+		return ""
+	}
+
+	return fmt.Sprintf(
+		"%s|%s|%s|%s|%s|%f|%f|%f|%f|%f|%s|%d|%d|%s|%s|%d|%f|%f|%s",
+		surv.CallSign,
+		surv.Departure,
+		surv.Destination,
+		surv.AircraftType,
+		surv.WakeTurbulance,
+		surv.Lat,
+		surv.Lon,
+		surv.Altitude,
+		surv.GroundSpeed,
+		surv.Heading,
+		surv.AircraftAddress,
+		surv.SIC,
+		surv.SAC,
+		surv.SSRCode,
+		surv.DateTime,
+		surv.TrackNumber,
+		surv.VX,
+		surv.VY,
+		surv.CDM,
+	)
 }
 
 func (b *surveillanceBatcher) requeue(batch []*model.AODSSurveillance) {

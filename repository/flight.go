@@ -167,6 +167,44 @@ func (f *FlightRepository) UpdateArrivalFlight(flightNumber string, date string,
 	return nil
 }
 
+func (f *FlightRepository) UpdateCanceledFlight(flightNumber string, std string) error {
+	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET canceled=TRUE
+	WHERE flight_number = $1 and type = 'DEP' and schedule_flight_time = $2`)
+
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	_, err2 := stmt.Exec(flightNumber, std)
+
+	if err2 != nil {
+		return err2
+	}
+
+	return nil
+}
+
+func (f *FlightRepository) UpdateDelayedFlight(flightNumber string, std string) error {
+	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET delayed=TRUE
+	WHERE flight_number = $1 and type = 'DEP' and schedule_flight_time = $2`)
+
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	_, err2 := stmt.Exec(flightNumber, std)
+
+	if err2 != nil {
+		return err2
+	}
+
+	return nil
+}
+
 func (f *FlightRepository) UpdateTOBTFlight(flightNumber string, datetime string) error {
 
 	datetime = datetime + "+00"

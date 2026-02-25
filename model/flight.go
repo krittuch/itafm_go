@@ -6,7 +6,7 @@ import (
 
 type Flight struct {
 	ID                 int        `json:"id"`
-	ACRegister           string     `json:"ac_register"`
+	ACRegister         string     `json:"ac_register"`
 	ActualFlightTime   *time.Time `json:"actual_flight_time"`
 	AircraftType       string     `json:"aircraft"`
 	Bay                string     `json:"bay"`
@@ -19,6 +19,7 @@ type Flight struct {
 	ScheduleFlightTime *time.Time `json:"schedule_flight_time"`
 	Sequence           string     `json:"sequence"`
 	Canceled           bool       `json:"canceled"`
+	Delayed            bool       `json:"delayed"`
 	Finished           bool       `json:"finished"`
 	Working            bool       `json:"working"`
 	CreatedAt          *time.Time `json:"created_at"`
@@ -46,6 +47,7 @@ type PatchFlight struct {
 	EstimateFlightTime *time.Time `json:"estimate_flight_time"`
 	ScheduleFlightTime *time.Time `json:"schedule_flight_time"`
 	Canceled           *bool      `json:"canceled"`
+	Delayed            *bool      `json:"delayed"`
 	Bay                *string    `json:"bay"`
 	Gate               *string    `json:"gate"`
 }

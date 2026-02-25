@@ -109,6 +109,34 @@ func TestSurveillanceBatcherSkipsAlreadyFlushedDateTime(t *testing.T) {
 	}
 }
 
+func TestSurveillanceBatcherDoesNotSkipChangedPositionWithSameDateTime(t *testing.T) {
+	writer := &fakeSurveillanceBatchWriter{success: true}
+	batcher := newSurveillanceBatcher(writer, time.Hour, 100)
+	defer batcher.close()
+
+	batcher.add(&model.AODSSurveillance{
+		CallSign: "TG123",
+		DateTime: "2026-02-18T10:00:00Z",
+		Lat:      13.6900,
+		Lon:      100.7500,
+	})
+	batcher.flush()
+	if len(writer.batches) != 1 {
+		t.Fatalf("expected first flush, got %d batches", len(writer.batches))
+	}
+
+	batcher.add(&model.AODSSurveillance{
+		CallSign: "TG123",
+		DateTime: "2026-02-18T10:00:00Z",
+		Lat:      13.7000,
+		Lon:      100.7600,
+	})
+	batcher.flush()
+	if len(writer.batches) != 2 {
+		t.Fatalf("expected changed position with same datetime to flush, got %d batches", len(writer.batches))
+	}
+}
+
 func TestGetSurveillanceDBBatchInterval(t *testing.T) {
 	t.Setenv("SURVEILLANCE_DB_BATCH_INTERVAL", "")
 	if got := getSurveillanceDBBatchInterval(); got != 10*time.Second {
