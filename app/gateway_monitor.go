@@ -1,6 +1,7 @@
 package app
 
 import (
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"log"
@@ -134,13 +135,16 @@ func (m *gatewayMonitor) start() {
 
 	host := lookupEnvWithDefault("GATEWAY_MONITOR_HOST", "0.0.0.0")
 	port := lookupIntEnvWithDefault("GATEWAY_MONITOR_PORT", 18081)
+	authEnabled := lookupBoolEnvWithDefault("GATEWAY_MONITOR_AUTH_ENABLED", true)
+	authUsername := lookupEnvWithDefault("GATEWAY_MONITOR_USERNAME", "aodsMon")
+	authPassword := lookupEnvWithDefault("GATEWAY_MONITOR_PASSWORD", "Aero77Secret")
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", m.handleHealth)
-	mux.HandleFunc("/routes", m.handleRoutes)
-	mux.HandleFunc("/archive", m.handleArchivePage)
-	mux.HandleFunc("/archive/search", m.handleArchiveSearch)
-	mux.HandleFunc("/", m.handleIndex)
+	mux.HandleFunc("/routes", m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleRoutes))
+	mux.HandleFunc("/archive", m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleArchivePage))
+	mux.HandleFunc("/archive/search", m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleArchiveSearch))
+	mux.HandleFunc("/", m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleIndex))
 
 	addr := host + ":" + strconv.Itoa(port)
 	m.server = &http.Server{
@@ -149,7 +153,12 @@ func (m *gatewayMonitor) start() {
 	}
 
 	go func() {
-		log.Printf("Gateway monitor online at http://%s", addr)
+		log.Printf(
+			"Gateway monitor online at http://%s (basic_auth=%t user=%s)",
+			addr,
+			authEnabled,
+			authUsername,
+		)
 		if err := m.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("Gateway monitor stopped: %v", err)
 		}
@@ -164,20 +173,7 @@ func (m *gatewayMonitor) route(name string) *gatewayRouteMonitor {
 
 func (m *gatewayMonitor) handleHealth(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]interface{}{
-		"status":      "ok",
-		"started_at":  m.startedAt.Format(time.RFC3339),
-		"route_count": len(m.routes),
-		"timestamp":   time.Now().UTC().Format(time.RFC3339),
-	}
-	if wantsHTML(r) {
-		writeGatewayJSONPage(w, gatewayJSONPageView{
-			Title:       "Gateway Health",
-			Description: "Health status for the gateway monitor service.",
-			Payload:     payload,
-			RawJSONURL:  "/health?format=json",
-			Nav:         gatewayNavLinks("/health"),
-		})
-		return
+		"status": "ok",
 	}
 	writeMonitorJSON(w, payload)
 }
@@ -214,6 +210,29 @@ func (m *gatewayMonitor) handleRoutes(w http.ResponseWriter, r *http.Request) {
 func writeMonitorJSON(w http.ResponseWriter, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func (m *gatewayMonitor) withMonitorBasicAuth(enabled bool, username string, password string, next http.HandlerFunc) http.HandlerFunc {
+	if !enabled {
+		return next
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, pass, ok := r.BasicAuth()
+		if !ok || !secureStringEqual(user, username) || !secureStringEqual(pass, password) {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Gateway Monitor"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func secureStringEqual(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
 func (m *gatewayMonitor) startHourlySummaryLogger() {
