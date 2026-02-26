@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 )
@@ -22,7 +21,6 @@ func onIDEPReceive(
 	data := model.IDEP{}
 	err := json.Unmarshal(body, &data)
 	if err != nil {
-		log.Println("Error unmarshalling IDEP data:", err)
 		return false
 	}
 

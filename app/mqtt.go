@@ -27,6 +27,7 @@ var kafkaIDEPTopic = flag.String("kafka-idep-topic", KAFKA_IDEP_TOPIC, "Kafka to
 var kafkaSURVTopic = flag.String("kafka-surv-topic", KAFKA_SURV_TOPIC, "Kafka topic for surveillance")
 
 var airlines []*model.CSVAirline
+var airlineIATALookup map[string]string
 
 var errEmptyFlightPayload = errors.New("empty flight payload")
 
@@ -62,6 +63,15 @@ func loadAirlineReference() {
 	if err := gocsv.UnmarshalFile(in, &airlines); err != nil {
 		panic(err)
 	}
+
+	stats := buildAirlineIATALookup()
+	log.Printf(
+		"airline reference loaded: rows=%d lookup_entries=%d invalid_rows=%d duplicate_icao_rows=%d",
+		stats.TotalRows,
+		stats.LookupEntries,
+		stats.InvalidRows,
+		stats.DuplicateICAORows,
+	)
 }
 
 func consumeSurveillanceStream(brokers []string, groupID string, topic string, db *sql.DB, monitor *gatewayRouteMonitor) {
@@ -143,7 +153,6 @@ func consumeFlightStream(
 
 			if !isNonFlightPlanCommand(command) {
 				monitor.RecordSkipped()
-				log.Println("ignored flight command:", command)
 				continue
 			}
 
@@ -339,16 +348,82 @@ func isNonFlightPlanCommand(command string) bool {
 
 // Change flight number from ICAO to IATA, for example THA616 -> TG616.
 func ConvertToIATA(flightNumber string) (string, bool) {
-	if len(flightNumber) < 3 {
-		return flightNumber, false
+	trimmedFlightNumber := strings.TrimSpace(flightNumber)
+	if len(trimmedFlightNumber) < 3 {
+		return trimmedFlightNumber, false
 	}
 
-	icaoCode := flightNumber[:3]
+	icaoCode := strings.ToUpper(trimmedFlightNumber[:3])
+	if iata, ok := lookupIATAByICAO(icaoCode); ok {
+		return iata + trimmedFlightNumber[3:], true
+	}
+
+	return trimmedFlightNumber, false
+}
+
+type airlineLookupBuildStats struct {
+	TotalRows         int
+	LookupEntries     int
+	InvalidRows       int
+	DuplicateICAORows int
+}
+
+func buildAirlineIATALookup() airlineLookupBuildStats {
+	stats := airlineLookupBuildStats{
+		TotalRows: len(airlines),
+	}
+	lookup := make(map[string]string, len(airlines))
 	for _, airline := range airlines {
-		if airline.ICAO == icaoCode {
-			return airline.IATA + flightNumber[3:], true
+		if airline == nil {
+			stats.InvalidRows++
+			continue
+		}
+		icao := normalizeAirlineCode(airline.ICAO)
+		iata := normalizeAirlineCode(airline.IATA)
+		if len(icao) != 3 || len(iata) == 0 {
+			stats.InvalidRows++
+			continue
+		}
+		if _, exists := lookup[icao]; exists {
+			stats.DuplicateICAORows++
+			continue
+		}
+		lookup[icao] = iata
+		stats.LookupEntries++
+	}
+	airlineIATALookup = lookup
+	return stats
+}
+
+func lookupIATAByICAO(icaoCode string) (string, bool) {
+	if len(airlineIATALookup) > 0 {
+		if iata, ok := airlineIATALookup[icaoCode]; ok && iata != "" {
+			return iata, true
 		}
 	}
 
-	return flightNumber, false
+	// Fallback keeps tests and manual overrides of `airlines` working even if the map was not rebuilt.
+	for _, airline := range airlines {
+		if airline == nil {
+			continue
+		}
+		if normalizeAirlineCode(airline.ICAO) != icaoCode {
+			continue
+		}
+		iata := normalizeAirlineCode(airline.IATA)
+		if iata == "" {
+			return "", false
+		}
+		if airlineIATALookup == nil {
+			airlineIATALookup = map[string]string{}
+		}
+		airlineIATALookup[icaoCode] = iata
+		return iata, true
+	}
+
+	return "", false
+}
+
+func normalizeAirlineCode(code string) string {
+	return strings.ToUpper(strings.TrimSpace(code))
 }

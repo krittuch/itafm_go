@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"regexp"
 	"strconv"
@@ -22,7 +21,6 @@ func onFPLReceive(
 	fplData := model.FlightPlan{}
 	err := json.Unmarshal(body, &fplData)
 	if err != nil {
-		log.Println(err)
 		return false
 	}
 
@@ -31,8 +29,6 @@ func onFPLReceive(
 	if err2 == nil {
 		dof := r.FindString(fplData.ITEM18)
 		fplData.DOF = strings.Replace(dof, `DOF/`, "", 1)
-	} else {
-		log.Println("err on regex : $1", err2)
 	}
 
 	regex, err3 := regexp.Compile(`(REG\/)\w+`)
@@ -42,8 +38,6 @@ func onFPLReceive(
 	if err3 == nil {
 		register = regex.FindString(fplData.ITEM18)
 		register = strings.Replace(register, `REG/`, "", 1)
-	} else {
-		log.Println("err on regex : $1", err3)
 	}
 
 	postFlight := model.PostFlight{
@@ -65,7 +59,6 @@ func onFPLReceive(
 	numberRegex := regexp.MustCompile(`\d+`)
 	matchString := numberRegex.FindString(fplData.CALLSIGN)
 	if len(matchString) <= 0 {
-		log.Println("Cannot find number in ", fplData.CALLSIGN)
 		return false
 	}
 
@@ -82,9 +75,7 @@ func onFPLReceive(
 
 	flight, err := flightController.GetFlight(postFlight.FlightNumber, std)
 
-	if err != nil {
-		log.Println("Cannot find flight : ", postFlight.FlightNumber, std, err)
-	} else {
+	if err == nil {
 
 		flightChangeLogController := controller.NewFlightChangeLogController(db)
 
@@ -95,9 +86,6 @@ func onFPLReceive(
 			NewValue: postFlight.Register,
 		})
 
-		if err != nil {
-			log.Println("FlightCon Insert error of Flight log ac_register change: ", flight.ID, flight.ScheduleFlightTime, err)
-		}
 	}
 
 	return true
@@ -110,7 +98,6 @@ func onCMDReceive(
 	fmvData := model.AODSFlightMovement{}
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
-		log.Println(err)
 		return false
 	}
 
@@ -138,7 +125,6 @@ func onCMDReceive(
 		timeStr = fmvData.TIME1
 		dateOfFlight = strings.Join([]string{"20", fmvData.DOF}, "")
 		if len(dateOfFlight) < 4 {
-			log.Println("Error DEP CMD", dateOfFlight)
 			return false
 		}
 		dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
@@ -199,7 +185,6 @@ func onCNLReceive(
 	fmvData := model.AODSFlightMovement{}
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
-		log.Println(err)
 		return
 	}
 
@@ -246,7 +231,6 @@ func onDLYReceive(
 	fmvData := model.AODSFlightMovement{}
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
-		log.Println(err)
 		return
 	}
 
@@ -293,7 +277,6 @@ func onCHGReceive(
 	fmvData := model.AODSFlightMovement{}
 	err := json.Unmarshal(body, &fmvData)
 	if err != nil {
-		log.Println(err)
 		return false
 	}
 
@@ -546,7 +529,7 @@ func insertDebugChangeLogIfChanged(db *sql.DB, field string, flight model.Flight
 		NewValue: newValue,
 	})
 	if err != nil {
-		log.Println("CHG debug changelog insert error:", field, flight.ID, err)
+		return
 	}
 }
 

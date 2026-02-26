@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,14 @@ type gatewayRouteMonitor struct {
 
 	lastErrorMu sync.RWMutex
 	lastError   string
+}
+
+type gatewayRouteCounterSnapshot struct {
+	Received       uint64
+	Processed      uint64
+	Skipped        uint64
+	DecodeErrors   uint64
+	ConsumerErrors uint64
 }
 
 func (r *gatewayRouteMonitor) RecordReceived() {
@@ -59,6 +68,16 @@ func (r *gatewayRouteMonitor) setLastError(err error) {
 	r.lastErrorMu.Lock()
 	r.lastError = err.Error()
 	r.lastErrorMu.Unlock()
+}
+
+func (r *gatewayRouteMonitor) counterSnapshot() gatewayRouteCounterSnapshot {
+	return gatewayRouteCounterSnapshot{
+		Received:       r.ReceivedCount.Load(),
+		Processed:      r.ProcessedCount.Load(),
+		Skipped:        r.SkippedCount.Load(),
+		DecodeErrors:   r.DecodeErrorCount.Load(),
+		ConsumerErrors: r.ConsumerErrorCount.Load(),
+	}
 }
 
 func (r *gatewayRouteMonitor) snapshot() map[string]interface{} {
@@ -135,6 +154,8 @@ func (m *gatewayMonitor) start() {
 			log.Printf("Gateway monitor stopped: %v", err)
 		}
 	}()
+
+	m.startHourlySummaryLogger()
 }
 
 func (m *gatewayMonitor) route(name string) *gatewayRouteMonitor {
@@ -195,6 +216,71 @@ func writeMonitorJSON(w http.ResponseWriter, payload interface{}) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
+func (m *gatewayMonitor) startHourlySummaryLogger() {
+	if m == nil || !lookupBoolEnvWithDefault("GATEWAY_SUMMARY_LOG_ENABLED", true) {
+		return
+	}
+
+	interval := lookupDurationEnvWithDefault("GATEWAY_SUMMARY_LOG_INTERVAL", time.Hour)
+	if interval <= 0 {
+		interval = time.Hour
+	}
+
+	prev := map[string]gatewayRouteCounterSnapshot{}
+	for key, route := range m.routes {
+		if route == nil {
+			continue
+		}
+		prev[key] = route.counterSnapshot()
+	}
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for tickAt := range ticker.C {
+			windowEnd := tickAt.UTC()
+			windowStart := windowEnd.Add(-interval)
+
+			for _, key := range []string{"flight", "idep", "surveillance"} {
+				route := m.routes[key]
+				if route == nil {
+					continue
+				}
+
+				now := route.counterSnapshot()
+				before := prev[key]
+				prev[key] = now
+
+				log.Printf(
+					"gateway hourly summary window=%s..%s route=%s topic=%s delta(received=%d processed=%d skipped=%d decode_errors=%d consumer_errors=%d) total(received=%d processed=%d skipped=%d decode_errors=%d consumer_errors=%d)",
+					windowStart.Format(time.RFC3339),
+					windowEnd.Format(time.RFC3339),
+					route.Label,
+					route.KafkaTopic,
+					diffUint64(now.Received, before.Received),
+					diffUint64(now.Processed, before.Processed),
+					diffUint64(now.Skipped, before.Skipped),
+					diffUint64(now.DecodeErrors, before.DecodeErrors),
+					diffUint64(now.ConsumerErrors, before.ConsumerErrors),
+					now.Received,
+					now.Processed,
+					now.Skipped,
+					now.DecodeErrors,
+					now.ConsumerErrors,
+				)
+			}
+		}
+	}()
+}
+
+func diffUint64(current, previous uint64) uint64 {
+	if current < previous {
+		return current
+	}
+	return current - previous
+}
+
 func lookupBoolEnvWithDefault(key string, fallback bool) bool {
 	if value := os.Getenv(key); value != "" {
 		parsed, err := strconv.ParseBool(value)
@@ -209,6 +295,15 @@ func lookupIntEnvWithDefault(key string, fallback int) int {
 	if value := os.Getenv(key); value != "" {
 		parsed, err := strconv.Atoi(value)
 		if err == nil {
+			return parsed
+		}
+	}
+	return fallback
+}
+
+func lookupDurationEnvWithDefault(key string, fallback time.Duration) time.Duration {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		if parsed, err := time.ParseDuration(value); err == nil {
 			return parsed
 		}
 	}
