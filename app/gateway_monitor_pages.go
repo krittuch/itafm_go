@@ -17,8 +17,19 @@ type gatewayJSONPageView struct {
 	Title       string
 	Description string
 	Payload     interface{}
+	MainURL     string
 	RawJSONURL  string
 	Nav         []gatewayNavLink
+}
+
+type gatewayIndexView struct {
+	MainURL          string
+	HealthURL        string
+	HealthJSONURL    string
+	RoutesURL        string
+	RoutesJSONURL    string
+	ArchiveURL       string
+	ArchiveSearchURL string
 }
 
 var gatewayIndexTemplate = template.Must(template.New("gateway-index").Parse(`<!DOCTYPE html>
@@ -59,24 +70,24 @@ var gatewayIndexTemplate = template.Must(template.New("gateway-index").Parse(`<!
         <h2>Health</h2>
         <div class="muted">Gateway monitor service health and timestamps.</div>
         <div class="links">
-          <a class="btn primary" href="/health">Open Health Page</a>
-          <a class="btn" href="/health?format=json">Raw JSON</a>
+          <a class="btn primary" href="{{.HealthURL}}">Open Health Page</a>
+          <a class="btn" href="{{.HealthJSONURL}}">Raw JSON</a>
         </div>
       </div>
       <div class="card">
         <h2>Routes</h2>
         <div class="muted">Counters and errors for FLMO, IDEP, and Surveillance consumers.</div>
         <div class="links">
-          <a class="btn primary" href="/routes">Open Routes Page</a>
-          <a class="btn" href="/routes?format=json">Raw JSON</a>
+          <a class="btn primary" href="{{.RoutesURL}}">Open Routes Page</a>
+          <a class="btn" href="{{.RoutesJSONURL}}">Raw JSON</a>
         </div>
       </div>
       <div class="card">
         <h2>Archive Search</h2>
         <div class="muted">Search archived raw broker payloads for <code>FLMO</code> and <code>IDEP</code>.</div>
         <div class="links">
-          <a class="btn alt" href="/archive">Open Archive Search</a>
-          <a class="btn" href="/archive/search">Archive JSON API</a>
+          <a class="btn alt" href="{{.ArchiveURL}}">Open Archive Search</a>
+          <a class="btn" href="{{.ArchiveSearchURL}}">Archive JSON API</a>
         </div>
       </div>
     </div>
@@ -125,7 +136,7 @@ var gatewayJSONPageTemplate = template.Must(template.New("gateway-json-page").Fu
       <h1>{{.Title}}</h1>
       <div class="muted">{{.Description}}</div>
       <div class="links">
-        <a href="/">Back To Main</a>
+        <a href="{{.MainURL}}">Back To Main</a>
         <a href="{{.RawJSONURL}}">Raw JSON</a>
       </div>
       <pre>{{prettyJSON .Payload}}</pre>
@@ -144,12 +155,12 @@ func wantsHTML(r *http.Request) bool {
 	return strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html")
 }
 
-func gatewayNavLinks(activeHref string) []gatewayNavLink {
+func gatewayNavLinks(basePath string, activeHref string) []gatewayNavLink {
 	links := []gatewayNavLink{
-		{Label: "Main", Href: "/"},
-		{Label: "Health", Href: "/health"},
-		{Label: "Routes", Href: "/routes"},
-		{Label: "Archive", Href: "/archive"},
+		{Label: "Main", Href: joinMonitorPath(basePath, "")},
+		{Label: "Health", Href: joinMonitorPath(basePath, "/health")},
+		{Label: "Routes", Href: joinMonitorPath(basePath, "/routes")},
+		{Label: "Archive", Href: joinMonitorPath(basePath, "/archive")},
 	}
 	for i := range links {
 		links[i].Active = links[i].Href == activeHref
@@ -158,18 +169,32 @@ func gatewayNavLinks(activeHref string) []gatewayNavLink {
 }
 
 func (m *gatewayMonitor) handleIndex(w http.ResponseWriter, r *http.Request) {
+	basePath := m.monitorBasePathForRequest(r, "")
+	routesURL := joinMonitorPath(basePath, "/routes")
+	healthURL := joinMonitorPath(basePath, "/health")
+	archiveURL := joinMonitorPath(basePath, "/archive")
+	archiveSearchURL := joinMonitorPath(basePath, "/archive/search")
+
 	payload := map[string]string{
 		"service": "gateway-monitor",
-		"routes":  "/routes",
-		"health":  "/health",
-		"archive": "/archive",
+		"routes":  routesURL,
+		"health":  healthURL,
+		"archive": archiveURL,
 	}
 	if !wantsHTML(r) {
 		writeMonitorJSON(w, payload)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = gatewayIndexTemplate.Execute(w, nil)
+	_ = gatewayIndexTemplate.Execute(w, gatewayIndexView{
+		MainURL:          joinMonitorPath(basePath, ""),
+		HealthURL:        healthURL,
+		HealthJSONURL:    healthURL + "?format=json",
+		RoutesURL:        routesURL,
+		RoutesJSONURL:    routesURL + "?format=json",
+		ArchiveURL:       archiveURL,
+		ArchiveSearchURL: archiveSearchURL,
+	})
 }
 
 func writeGatewayJSONPage(w http.ResponseWriter, view gatewayJSONPageView) {

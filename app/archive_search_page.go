@@ -58,6 +58,11 @@ type archivePageView struct {
 	QueryStringNoOffset string
 	PrevURL             string
 	NextURL             string
+	MainURL             string
+	HealthURL           string
+	RoutesURL           string
+	ArchiveURL          string
+	ArchiveSearchURL    string
 }
 
 var archiveSearchPageTemplate = template.Must(template.New("archive-search").Funcs(template.FuncMap{
@@ -284,22 +289,22 @@ var archiveSearchPageTemplate = template.Must(template.New("archive-search").Fun
       <h1>AODS Archive Search</h1>
       <div class="muted">Search raw archived broker payloads for <code>FLMO</code> and <code>IDEP</code>. Surveillance is intentionally excluded.</div>
 	      <div class="links">
-	        <a class="btn" href="/">Main</a>
-	        <a class="btn" href="/health">Health</a>
-	        <a class="btn" href="/routes">Routes</a>
-	        <a class="btn" href="/archive">Reset</a>
-	        <a class="btn" href="/archive/search?{{.QueryStringNoOffset}}">JSON API (current filters)</a>
+	        <a class="btn" href="{{.MainURL}}">Main</a>
+	        <a class="btn" href="{{.HealthURL}}">Health</a>
+	        <a class="btn" href="{{.RoutesURL}}">Routes</a>
+	        <a class="btn" href="{{.ArchiveURL}}">Reset</a>
+	        <a class="btn" href="{{.ArchiveSearchURL}}?{{.QueryStringNoOffset}}">JSON API (current filters)</a>
 	      </div>
 	      <div class="presets">
 	        <span class="preset-label">Presets:</span>
-	        <a class="btn" href="/archive?stream=FLMO&sort=desc&limit=100">Latest FLMO</a>
-	        <a class="btn" href="/archive?stream=IDEP&sort=desc&limit=100">Latest IDEP</a>
-	        <a class="btn alt" href="/archive?stream=FLMO&command=DLA&sort=desc&limit=100">Recent DLA</a>
-	        <a class="btn alt" href="/archive?stream=FLMO&command=DLY&sort=desc&limit=100">Recent DLY</a>
-	        <a class="btn alt" href="/archive?stream=FLMO&command=CNL&sort=desc&limit=100">Recent CNL</a>
-	        <a class="btn" href="/archive?stream=FLMO&command=DEP&sort=desc&limit=100">Recent DEP</a>
-	        <a class="btn" href="/archive?stream=FLMO&command=ARR&sort=desc&limit=100">Recent ARR</a>
-	        <a class="btn" href="/archive?stream=FLMO&command=FPL&sort=desc&limit=100">Recent FPL</a>
+	        <a class="btn" href="{{.ArchiveURL}}?stream=FLMO&sort=desc&limit=100">Latest FLMO</a>
+	        <a class="btn" href="{{.ArchiveURL}}?stream=IDEP&sort=desc&limit=100">Latest IDEP</a>
+	        <a class="btn alt" href="{{.ArchiveURL}}?stream=FLMO&command=DLA&sort=desc&limit=100">Recent DLA</a>
+	        <a class="btn alt" href="{{.ArchiveURL}}?stream=FLMO&command=DLY&sort=desc&limit=100">Recent DLY</a>
+	        <a class="btn alt" href="{{.ArchiveURL}}?stream=FLMO&command=CNL&sort=desc&limit=100">Recent CNL</a>
+	        <a class="btn" href="{{.ArchiveURL}}?stream=FLMO&command=DEP&sort=desc&limit=100">Recent DEP</a>
+	        <a class="btn" href="{{.ArchiveURL}}?stream=FLMO&command=ARR&sort=desc&limit=100">Recent ARR</a>
+	        <a class="btn" href="{{.ArchiveURL}}?stream=FLMO&command=FPL&sort=desc&limit=100">Recent FPL</a>
 	      </div>
 	    </div>
 
@@ -307,7 +312,7 @@ var archiveSearchPageTemplate = template.Must(template.New("archive-search").Fun
       <div class="error">Archive database is not connected. Set <code>AODS_ARCHIVE_DB_*</code> on the gateway and restart.</div>
     {{end}}
 
-    <form method="get" action="/archive">
+    <form method="get" action="{{.ArchiveURL}}">
       <div class="row">
         <div class="field c6">
           <label for="q">General search (stream/topic/command/payload)</label>
@@ -385,7 +390,7 @@ var archiveSearchPageTemplate = template.Must(template.New("archive-search").Fun
 
       <div class="actions">
         <button class="btn primary" type="submit">Search Archive</button>
-        <a class="btn" href="/archive">Clear Filters</a>
+        <a class="btn" href="{{.ArchiveURL}}">Clear Filters</a>
         {{if .PrevURL}}<a class="btn" href="{{.PrevURL}}">Previous Page</a>{{end}}
         {{if .NextURL}}<a class="btn alt" href="{{.NextURL}}">Next Page</a>{{end}}
       </div>
@@ -439,15 +444,22 @@ func (m *gatewayMonitor) handleArchivePage(w http.ResponseWriter, r *http.Reques
 	}
 
 	result := m.runArchiveSearch(r)
+	basePath := m.monitorBasePathForRequest(r, "/archive")
+	archiveURL := joinMonitorPath(basePath, "/archive")
 	view := archivePageView{
 		archiveSearchResult: result,
 		QueryStringNoOffset: archiveQueryStringNoOffset(r.URL.Query()),
+		MainURL:             joinMonitorPath(basePath, ""),
+		HealthURL:           joinMonitorPath(basePath, "/health"),
+		RoutesURL:           joinMonitorPath(basePath, "/routes"),
+		ArchiveURL:          archiveURL,
+		ArchiveSearchURL:    joinMonitorPath(basePath, "/archive/search"),
 	}
 	if result.PrevOffset >= 0 {
-		view.PrevURL = archiveURLWithOffset(r.URL.Query(), result.PrevOffset)
+		view.PrevURL = archiveURLWithOffset(archiveURL, r.URL.Query(), result.PrevOffset)
 	}
 	if result.HasMore {
-		view.NextURL = archiveURLWithOffset(r.URL.Query(), result.NextOffset)
+		view.NextURL = archiveURLWithOffset(archiveURL, r.URL.Query(), result.NextOffset)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -690,10 +702,10 @@ func parseArchiveTimeFilter(raw string, endExclusiveDate bool) (time.Time, bool,
 	return time.Time{}, false, "expected RFC3339 or YYYY-MM-DD[THH:MM[:SS]]"
 }
 
-func archiveURLWithOffset(values url.Values, offset int) string {
+func archiveURLWithOffset(archiveURL string, values url.Values, offset int) string {
 	cloned := cloneURLValues(values)
 	cloned.Set("offset", strconv.Itoa(offset))
-	return "/archive?" + cloned.Encode()
+	return archiveURL + "?" + cloned.Encode()
 }
 
 func archiveQueryStringNoOffset(values url.Values) string {

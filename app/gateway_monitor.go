@@ -105,12 +105,14 @@ type gatewayMonitor struct {
 	server    *http.Server
 	routes    map[string]*gatewayRouteMonitor
 	archiveDB *sql.DB
+	basePath  string
 }
 
 func newGatewayMonitor(flightTopic, idepTopic, survTopic string, archiveDB *sql.DB) *gatewayMonitor {
 	return &gatewayMonitor{
 		startedAt: time.Now().UTC(),
 		archiveDB: archiveDB,
+		basePath:  "/aods-mon",
 		routes: map[string]*gatewayRouteMonitor{
 			"flight": {
 				Label:      "FLIGHT_MOVEMENT",
@@ -138,13 +140,56 @@ func (m *gatewayMonitor) start() {
 	authEnabled := lookupBoolEnvWithDefault("GATEWAY_MONITOR_AUTH_ENABLED", true)
 	authUsername := lookupEnvWithDefault("GATEWAY_MONITOR_USERNAME", "aodsMon")
 	authPassword := lookupEnvWithDefault("GATEWAY_MONITOR_PASSWORD", "Aero77Secret")
+	m.basePath = normalizeMonitorBasePath(lookupEnvWithDefault("GATEWAY_MONITOR_BASE_PATH", "/aods-mon"))
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", m.handleHealth)
-	mux.HandleFunc("/routes", m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleRoutes))
-	mux.HandleFunc("/archive", m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleArchivePage))
-	mux.HandleFunc("/archive/search", m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleArchiveSearch))
-	mux.HandleFunc("/", m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleIndex))
+	seenPatterns := map[string]struct{}{}
+	register := func(pattern string, handler http.HandlerFunc) {
+		if pattern == "" {
+			return
+		}
+		if _, exists := seenPatterns[pattern]; exists {
+			return
+		}
+		seenPatterns[pattern] = struct{}{}
+		mux.HandleFunc(pattern, handler)
+	}
+
+	healthHandler := m.handleHealth
+	routesHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleRoutes)
+	archivePageHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleArchivePage)
+	archiveSearchHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleArchiveSearch)
+	indexHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleIndex)
+	dispatchHandler := func(w http.ResponseWriter, r *http.Request) {
+		switch monitorEndpointSuffix(r) {
+		case "/health":
+			healthHandler(w, r)
+		case "/routes":
+			routesHandler(w, r)
+		case "/archive":
+			archivePageHandler(w, r)
+		case "/archive/search":
+			archiveSearchHandler(w, r)
+		default:
+			indexHandler(w, r)
+		}
+	}
+
+	register("/health", healthHandler)
+	register(m.monitorPath("/health"), healthHandler)
+
+	register("/routes", routesHandler)
+	register(m.monitorPath("/routes"), routesHandler)
+
+	register("/archive", archivePageHandler)
+	register(m.monitorPath("/archive"), archivePageHandler)
+
+	register("/archive/search", archiveSearchHandler)
+	register(m.monitorPath("/archive/search"), archiveSearchHandler)
+
+	register("/", dispatchHandler)
+	register(m.monitorPath(""), indexHandler)
+	register(m.monitorPath("/"), indexHandler)
 
 	addr := host + ":" + strconv.Itoa(port)
 	m.server = &http.Server{
@@ -154,8 +199,9 @@ func (m *gatewayMonitor) start() {
 
 	go func() {
 		log.Printf(
-			"Gateway monitor online at http://%s (basic_auth=%t user=%s)",
+			"Gateway monitor online at http://%s%s (basic_auth=%t user=%s)",
 			addr,
+			m.monitorPath(""),
 			authEnabled,
 			authUsername,
 		)
@@ -195,12 +241,15 @@ func (m *gatewayMonitor) handleRoutes(w http.ResponseWriter, r *http.Request) {
 		"routes":     routes,
 	}
 	if wantsHTML(r) {
+		basePath := m.monitorBasePathForRequest(r, "/routes")
+		routesURL := joinMonitorPath(basePath, "/routes")
 		writeGatewayJSONPage(w, gatewayJSONPageView{
 			Title:       "Gateway Routes",
 			Description: "Route-level counters for FLMO, IDEP, and Surveillance consumers.",
 			Payload:     payload,
-			RawJSONURL:  "/routes?format=json",
-			Nav:         gatewayNavLinks("/routes"),
+			MainURL:     joinMonitorPath(basePath, ""),
+			RawJSONURL:  routesURL + "?format=json",
+			Nav:         gatewayNavLinks(basePath, routesURL),
 		})
 		return
 	}
@@ -334,4 +383,128 @@ func formatUnixTimestamp(unix int64) string {
 		return ""
 	}
 	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
+}
+
+func normalizeMonitorBasePath(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" || s == "/" {
+		return ""
+	}
+	if !strings.HasPrefix(s, "/") {
+		s = "/" + s
+	}
+	s = strings.TrimRight(s, "/")
+	if s == "" || s == "/" {
+		return ""
+	}
+	return s
+}
+
+func joinMonitorPath(basePath string, suffix string) string {
+	base := normalizeMonitorBasePath(basePath)
+	switch strings.TrimSpace(suffix) {
+	case "":
+		if base == "" {
+			return "/"
+		}
+		return base
+	case "/":
+		if base == "" {
+			return "/"
+		}
+		return base + "/"
+	}
+
+	s := suffix
+	if !strings.HasPrefix(s, "/") {
+		s = "/" + s
+	}
+	if base == "" {
+		return s
+	}
+	return base + s
+}
+
+func (m *gatewayMonitor) monitorPath(suffix string) string {
+	if m == nil {
+		return joinMonitorPath("/aods-mon", suffix)
+	}
+	return joinMonitorPath(m.basePath, suffix)
+}
+
+func monitorEndpointSuffix(r *http.Request) string {
+	if r == nil || r.URL == nil {
+		return ""
+	}
+	path := strings.TrimRight(strings.TrimSpace(r.URL.Path), "/")
+	if path == "" {
+		return ""
+	}
+	switch {
+	case strings.HasSuffix(path, "/archive/search"):
+		return "/archive/search"
+	case strings.HasSuffix(path, "/archive"):
+		return "/archive"
+	case strings.HasSuffix(path, "/routes"):
+		return "/routes"
+	case strings.HasSuffix(path, "/health"):
+		return "/health"
+	default:
+		return ""
+	}
+}
+
+func (m *gatewayMonitor) monitorBasePathForRequest(r *http.Request, endpointSuffix string) string {
+	if r == nil {
+		return normalizeMonitorBasePath(m.basePath)
+	}
+
+	if v := normalizeMonitorBasePath(r.Header.Get("X-Forwarded-Prefix")); v != "" {
+		return v
+	}
+
+	for _, originalPath := range []string{
+		strings.TrimSpace(r.Header.Get("X-Original-URI")),
+		strings.TrimSpace(r.Header.Get("X-Rewrite-URL")),
+	} {
+		if base, ok := deriveMonitorBasePathFromPath(originalPath, endpointSuffix); ok {
+			return base
+		}
+	}
+
+	if base, ok := deriveMonitorBasePathFromPath(r.URL.Path, endpointSuffix); ok {
+		return base
+	}
+
+	return normalizeMonitorBasePath(m.basePath)
+}
+
+func deriveMonitorBasePathFromPath(path string, endpointSuffix string) (string, bool) {
+	s := strings.TrimSpace(path)
+	if s == "" {
+		return "", false
+	}
+
+	if endpointSuffix == "" {
+		if s == "/" {
+			return "", true
+		}
+		return normalizeMonitorBasePath(s), true
+	}
+
+	cleanPath := strings.TrimRight(s, "/")
+	cleanEndpoint := strings.TrimRight(strings.TrimSpace(endpointSuffix), "/")
+	if cleanPath == "" {
+		cleanPath = "/"
+	}
+	if cleanEndpoint == "" {
+		return normalizeMonitorBasePath(cleanPath), true
+	}
+	if cleanPath == cleanEndpoint {
+		return "", true
+	}
+	if strings.HasSuffix(cleanPath, cleanEndpoint) {
+		return normalizeMonitorBasePath(strings.TrimSuffix(cleanPath, cleanEndpoint)), true
+	}
+	return "", false
 }
