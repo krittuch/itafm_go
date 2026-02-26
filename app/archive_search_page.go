@@ -444,16 +444,15 @@ func (m *gatewayMonitor) handleArchivePage(w http.ResponseWriter, r *http.Reques
 	}
 
 	result := m.runArchiveSearch(r)
-	basePath := m.monitorBasePathForRequest(r, "/archive")
-	archiveURL := joinMonitorPath(basePath, "/archive")
+	archiveURL := "./archive"
 	view := archivePageView{
 		archiveSearchResult: result,
 		QueryStringNoOffset: archiveQueryStringNoOffset(r.URL.Query()),
-		MainURL:             joinMonitorPath(basePath, ""),
-		HealthURL:           joinMonitorPath(basePath, "/health"),
-		RoutesURL:           joinMonitorPath(basePath, "/routes"),
+		MainURL:             "./",
+		HealthURL:           "./health",
+		RoutesURL:           "./routes",
 		ArchiveURL:          archiveURL,
-		ArchiveSearchURL:    joinMonitorPath(basePath, "/archive/search"),
+		ArchiveSearchURL:    "./archive/search",
 	}
 	if result.PrevOffset >= 0 {
 		view.PrevURL = archiveURLWithOffset(archiveURL, r.URL.Query(), result.PrevOffset)
@@ -702,10 +701,10 @@ func parseArchiveTimeFilter(raw string, endExclusiveDate bool) (time.Time, bool,
 	return time.Time{}, false, "expected RFC3339 or YYYY-MM-DD[THH:MM[:SS]]"
 }
 
-func archiveURLWithOffset(archiveURL string, values url.Values, offset int) string {
+func archiveURLWithOffset(_ string, values url.Values, offset int) string {
 	cloned := cloneURLValues(values)
 	cloned.Set("offset", strconv.Itoa(offset))
-	return archiveURL + "?" + cloned.Encode()
+	return "?" + cloned.Encode()
 }
 
 func archiveQueryStringNoOffset(values url.Values) string {

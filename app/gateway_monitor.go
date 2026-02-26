@@ -241,15 +241,13 @@ func (m *gatewayMonitor) handleRoutes(w http.ResponseWriter, r *http.Request) {
 		"routes":     routes,
 	}
 	if wantsHTML(r) {
-		basePath := m.monitorBasePathForRequest(r, "/routes")
-		routesURL := joinMonitorPath(basePath, "/routes")
 		writeGatewayJSONPage(w, gatewayJSONPageView{
 			Title:       "Gateway Routes",
 			Description: "Route-level counters for FLMO, IDEP, and Surveillance consumers.",
 			Payload:     payload,
-			MainURL:     joinMonitorPath(basePath, ""),
-			RawJSONURL:  routesURL + "?format=json",
-			Nav:         gatewayNavLinks(basePath, routesURL),
+			MainURL:     "./",
+			RawJSONURL:  "./routes?format=json",
+			Nav:         gatewayNavLinks("./routes"),
 		})
 		return
 	}

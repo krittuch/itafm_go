@@ -155,12 +155,12 @@ func wantsHTML(r *http.Request) bool {
 	return strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html")
 }
 
-func gatewayNavLinks(basePath string, activeHref string) []gatewayNavLink {
+func gatewayNavLinks(activeHref string) []gatewayNavLink {
 	links := []gatewayNavLink{
-		{Label: "Main", Href: joinMonitorPath(basePath, "")},
-		{Label: "Health", Href: joinMonitorPath(basePath, "/health")},
-		{Label: "Routes", Href: joinMonitorPath(basePath, "/routes")},
-		{Label: "Archive", Href: joinMonitorPath(basePath, "/archive")},
+		{Label: "Main", Href: "./"},
+		{Label: "Health", Href: "./health"},
+		{Label: "Routes", Href: "./routes"},
+		{Label: "Archive", Href: "./archive"},
 	}
 	for i := range links {
 		links[i].Active = links[i].Href == activeHref
@@ -169,17 +169,20 @@ func gatewayNavLinks(basePath string, activeHref string) []gatewayNavLink {
 }
 
 func (m *gatewayMonitor) handleIndex(w http.ResponseWriter, r *http.Request) {
-	basePath := m.monitorBasePathForRequest(r, "")
-	routesURL := joinMonitorPath(basePath, "/routes")
-	healthURL := joinMonitorPath(basePath, "/health")
-	archiveURL := joinMonitorPath(basePath, "/archive")
-	archiveSearchURL := joinMonitorPath(basePath, "/archive/search")
+	if r != nil && r.URL != nil && r.URL.Path != "/" && !strings.HasSuffix(r.URL.Path, "/") {
+		target := r.URL.Path + "/"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+		return
+	}
 
 	payload := map[string]string{
 		"service": "gateway-monitor",
-		"routes":  routesURL,
-		"health":  healthURL,
-		"archive": archiveURL,
+		"routes":  "./routes",
+		"health":  "./health",
+		"archive": "./archive",
 	}
 	if !wantsHTML(r) {
 		writeMonitorJSON(w, payload)
@@ -187,13 +190,13 @@ func (m *gatewayMonitor) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = gatewayIndexTemplate.Execute(w, gatewayIndexView{
-		MainURL:          joinMonitorPath(basePath, ""),
-		HealthURL:        healthURL,
-		HealthJSONURL:    healthURL + "?format=json",
-		RoutesURL:        routesURL,
-		RoutesJSONURL:    routesURL + "?format=json",
-		ArchiveURL:       archiveURL,
-		ArchiveSearchURL: archiveSearchURL,
+		MainURL:          "./",
+		HealthURL:        "./health",
+		HealthJSONURL:    "./health?format=json",
+		RoutesURL:        "./routes",
+		RoutesJSONURL:    "./routes?format=json",
+		ArchiveURL:       "./archive",
+		ArchiveSearchURL: "./archive/search",
 	})
 }
 
