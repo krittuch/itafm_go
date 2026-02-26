@@ -40,12 +40,13 @@ func StartConsumeKafka(a *App) {
 		return
 	}
 
-	monitor := newGatewayMonitor(*kafkaFlightTopic, *kafkaIDEPTopic, *kafkaSURVTopic)
+	monitor := newGatewayMonitor(*kafkaFlightTopic, *kafkaIDEPTopic, *kafkaSURVTopic, a.AODSArchiveDB)
 	monitor.start()
+	archiveStore := newAODSArchiveStore(a.AODSArchiveDB)
 
 	go consumeSurveillanceStream(brokers, *kafkaGroupID, *kafkaSURVTopic, a.DB, monitor.route("surveillance"))
-	go consumeIDEPStream(brokers, *kafkaGroupID, *kafkaIDEPTopic, a.DB, monitor.route("idep"))
-	go consumeFlightStream(brokers, *kafkaGroupID, *kafkaFlightTopic, a.DB, monitor.route("flight"))
+	go consumeIDEPStream(brokers, *kafkaGroupID, *kafkaIDEPTopic, a.DB, archiveStore, monitor.route("idep"))
+	go consumeFlightStream(brokers, *kafkaGroupID, *kafkaFlightTopic, a.DB, archiveStore, monitor.route("flight"))
 
 	select {}
 }
@@ -84,10 +85,18 @@ func consumeSurveillanceStream(brokers []string, groupID string, topic string, d
 	})
 }
 
-func consumeIDEPStream(brokers []string, groupID string, topic string, db *sql.DB, monitor *gatewayRouteMonitor) {
+func consumeIDEPStream(
+	brokers []string,
+	groupID string,
+	topic string,
+	db *sql.DB,
+	archiveStore *aodsArchiveStore,
+	monitor *gatewayRouteMonitor,
+) {
 	flightController := controller.NewFlightController(db)
 	runKafkaConsumerLoop(brokers, groupID, topic, monitor, func(value []byte) {
 		monitor.RecordReceived()
+		archiveStore.SaveIDEP(topic, value)
 		if onIDEPReceive(value, db, flightController) {
 			monitor.RecordProcessed()
 		} else {
@@ -96,7 +105,14 @@ func consumeIDEPStream(brokers []string, groupID string, topic string, db *sql.D
 	})
 }
 
-func consumeFlightStream(brokers []string, groupID string, topic string, db *sql.DB, monitor *gatewayRouteMonitor) {
+func consumeFlightStream(
+	brokers []string,
+	groupID string,
+	topic string,
+	db *sql.DB,
+	archiveStore *aodsArchiveStore,
+	monitor *gatewayRouteMonitor,
+) {
 	flightController := controller.NewFlightController(db)
 	runKafkaConsumerLoop(brokers, groupID, topic, monitor, func(value []byte) {
 		monitor.RecordReceived()
@@ -109,6 +125,7 @@ func consumeFlightStream(brokers []string, groupID string, topic string, db *sql
 
 		for _, record := range records {
 			command, err := extractFlightCommand(record)
+			archiveStore.SaveFLMO(topic, record, command)
 			if err != nil {
 				monitor.RecordDecodeError(err)
 				log.Println("error decoding flight command:", err)
@@ -141,8 +158,11 @@ func consumeFlightStream(brokers []string, groupID string, topic string, db *sql
 				onCNLReceive(record, db, flightController)
 				monitor.RecordSkipped()
 			case "CHG":
-				onCHGReceive(record, db, flightController)
-				monitor.RecordSkipped()
+				if onCHGReceive(record, db, flightController) {
+					monitor.RecordProcessed()
+				} else {
+					monitor.RecordSkipped()
+				}
 			case "DLA", "DLY":
 				onDLYReceive(record, db, flightController)
 				monitor.RecordSkipped()

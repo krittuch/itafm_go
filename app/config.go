@@ -51,6 +51,12 @@ var (
 	DBNAME  = os.Getenv("DB_NAME")
 	DBPORT  = os.Getenv("DB_PORT")
 
+	AODSArchiveDBUser     = os.Getenv("AODS_ARCHIVE_DB_USER")
+	AODSArchiveDBPassword = os.Getenv("AODS_ARCHIVE_DB_PASSWORD")
+	AODSArchiveDBHost     = os.Getenv("AODS_ARCHIVE_DB_HOST")
+	AODSArchiveDBPort     = os.Getenv("AODS_ARCHIVE_DB_PORT")
+	AODSArchiveDBName     = os.Getenv("AODS_ARCHIVE_DB_NAME")
+
 	ITAFM_MQTT_IP_ADDRESS = os.Getenv("ITAFM_MQTT_IP_ADDRESS")
 	ITAFM_MQTT_PORT       = os.Getenv("ITAFM_MQTT_PORT")
 	ITAFM_MQTT_USER       = os.Getenv("ITAFM_MQTT_USER")

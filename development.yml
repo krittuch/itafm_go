@@ -1,6 +1,20 @@
 version: "3"
 
 services:
+  aods_archive_db:
+    image: postgres:16-alpine
+    container_name: itafm_aods_archive_db_dev
+    restart: always
+    environment:
+      POSTGRES_DB: aods_archive
+      POSTGRES_USER: aods_archive
+      POSTGRES_PASSWORD: aods_archive
+    ports:
+      - "5435:5432"
+    volumes:
+      - aods_archive_db_dev:/var/lib/postgresql/data
+      - ./compose/aods-archive/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+
   itafm_kafka:
     image: redpandadata/redpanda:v24.2.9
     container_name: itafm_kafka
@@ -44,7 +58,14 @@ services:
       - ./.envs/.development/.postgres
       - ./.envs/.development/.mqtt
       - ./.envs/.development/.kafka
+    environment:
+      AODS_ARCHIVE_DB_HOST: localhost
+      AODS_ARCHIVE_DB_PORT: "5435"
+      AODS_ARCHIVE_DB_NAME: aods_archive
+      AODS_ARCHIVE_DB_USER: aods_archive
+      AODS_ARCHIVE_DB_PASSWORD: aods_archive
     depends_on:
+      - aods_archive_db
       - itafm_kafka
       - java_broker
     volumes:
@@ -52,4 +73,5 @@ services:
     network_mode: host
 
 volumes:
+  aods_archive_db_dev:
   kafka_data_dev:

@@ -70,13 +70,15 @@ func (f *FlightChangeLogRepository) Insert(postFlightChangeLog model.PostFlightC
 	}
 	defer stmt.Close()
 
+	nowUTC := time.Now().UTC()
+
 	_, err = stmt.Exec(
 		postFlightChangeLog.FlightID,
 		postFlightChangeLog.Field,
 		postFlightChangeLog.OldValue,
 		postFlightChangeLog.NewValue,
-		time.Now(),
-		time.Now())
+		nowUTC,
+		nowUTC)
 	if err != nil {
 		return err
 	}

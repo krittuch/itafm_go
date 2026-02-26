@@ -10,5 +10,6 @@ type AODSFlightMovement struct {
 	ARRIVAL     string `json:"ARRIVAL"`
 	TIME2       string `json:"TIME2"`
 	DOF         string `json:"DOF"`
+	ITEM        string `json:"ITEM"`
 	ITEM18      string `json:"ITEM18"`
 }

@@ -10,6 +10,9 @@ import (
 
 type FlightControllerInterface interface {
 	GetFlight(string, string) (model.Flight, error)
+	GetFlightByTypeAndSchedule(string, string, string) (model.Flight, error)
+	FindDepartureFlightByDestinationAndDate(string, string, string) (model.Flight, error)
+	FindArrivalFlightByRouteAndDate(string, string, string, string) (model.Flight, error)
 	InsertFlight(*model.PostFlight)
 	UpdateFlight(*model.PatchFlight) error
 	UpdateBay(string, string, string)
@@ -17,6 +20,8 @@ type FlightControllerInterface interface {
 	UpdateArrivalFlight(string, string, string)
 	UpdateCanceledFlight(string, string)
 	UpdateDelayedFlight(string, string)
+	UpdateEstimateFlightByDestination(string, string, string, string)
+	UpdateArrivalEstimateFlightByRoute(string, string, string, string, string)
 	UpdateRegister(string, string, string)
 }
 
@@ -33,6 +38,21 @@ func NewFlightController(db *sql.DB) *FlightController {
 func (f *FlightController) GetFlight(flightNumber string, std string) (model.Flight, error) {
 	repo := repository.NewFlightRepository(f.DB)
 	return repo.GetFlight(flightNumber, std)
+}
+
+func (f *FlightController) GetFlightByTypeAndSchedule(flightNumber string, flightType string, std string) (model.Flight, error) {
+	repo := repository.NewFlightRepository(f.DB)
+	return repo.GetFlightByTypeAndSchedule(flightNumber, flightType, std)
+}
+
+func (f *FlightController) FindDepartureFlightByDestinationAndDate(flightNumber string, destination string, date string) (model.Flight, error) {
+	repo := repository.NewFlightRepository(f.DB)
+	return repo.FindDepartureFlightByDestinationAndDate(flightNumber, destination, date)
+}
+
+func (f *FlightController) FindArrivalFlightByRouteAndDate(flightNumber string, departure string, destination string, date string) (model.Flight, error) {
+	repo := repository.NewFlightRepository(f.DB)
+	return repo.FindArrivalFlightByRouteAndDate(flightNumber, departure, destination, date)
 }
 
 func (f *FlightController) UpdateFlight(flight *model.PatchFlight) {
@@ -88,6 +108,26 @@ func (f *FlightController) UpdateDelayedFlight(flightNumber string, std string) 
 	repo := repository.NewFlightRepository(f.DB)
 
 	err := repo.UpdateDelayedFlight(flightNumber, std)
+
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func (f *FlightController) UpdateEstimateFlightByDestination(flightNumber string, destination string, date string, datetime string) {
+	repo := repository.NewFlightRepository(f.DB)
+
+	err := repo.UpdateEstimateFlightByDestination(flightNumber, destination, date, datetime)
+
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func (f *FlightController) UpdateArrivalEstimateFlightByRoute(flightNumber string, departure string, destination string, date string, datetime string) {
+	repo := repository.NewFlightRepository(f.DB)
+
+	err := repo.UpdateArrivalEstimateFlightByRoute(flightNumber, departure, destination, date, datetime)
 
 	if err != nil {
 		log.Println(err)

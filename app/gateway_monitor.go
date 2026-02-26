@@ -1,6 +1,7 @@
 package app
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -83,11 +84,13 @@ type gatewayMonitor struct {
 	startedAt time.Time
 	server    *http.Server
 	routes    map[string]*gatewayRouteMonitor
+	archiveDB *sql.DB
 }
 
-func newGatewayMonitor(flightTopic, idepTopic, survTopic string) *gatewayMonitor {
+func newGatewayMonitor(flightTopic, idepTopic, survTopic string, archiveDB *sql.DB) *gatewayMonitor {
 	return &gatewayMonitor{
 		startedAt: time.Now().UTC(),
+		archiveDB: archiveDB,
 		routes: map[string]*gatewayRouteMonitor{
 			"flight": {
 				Label:      "FLIGHT_MOVEMENT",
@@ -116,13 +119,9 @@ func (m *gatewayMonitor) start() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", m.handleHealth)
 	mux.HandleFunc("/routes", m.handleRoutes)
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
-		writeMonitorJSON(w, map[string]string{
-			"service": "gateway-monitor",
-			"routes":  "/routes",
-			"health":  "/health",
-		})
-	})
+	mux.HandleFunc("/archive", m.handleArchivePage)
+	mux.HandleFunc("/archive/search", m.handleArchiveSearch)
+	mux.HandleFunc("/", m.handleIndex)
 
 	addr := host + ":" + strconv.Itoa(port)
 	m.server = &http.Server{
@@ -142,16 +141,27 @@ func (m *gatewayMonitor) route(name string) *gatewayRouteMonitor {
 	return m.routes[name]
 }
 
-func (m *gatewayMonitor) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	writeMonitorJSON(w, map[string]interface{}{
+func (m *gatewayMonitor) handleHealth(w http.ResponseWriter, r *http.Request) {
+	payload := map[string]interface{}{
 		"status":      "ok",
 		"started_at":  m.startedAt.Format(time.RFC3339),
 		"route_count": len(m.routes),
 		"timestamp":   time.Now().UTC().Format(time.RFC3339),
-	})
+	}
+	if wantsHTML(r) {
+		writeGatewayJSONPage(w, gatewayJSONPageView{
+			Title:       "Gateway Health",
+			Description: "Health status for the gateway monitor service.",
+			Payload:     payload,
+			RawJSONURL:  "/health?format=json",
+			Nav:         gatewayNavLinks("/health"),
+		})
+		return
+	}
+	writeMonitorJSON(w, payload)
 }
 
-func (m *gatewayMonitor) handleRoutes(w http.ResponseWriter, _ *http.Request) {
+func (m *gatewayMonitor) handleRoutes(w http.ResponseWriter, r *http.Request) {
 	routes := make([]map[string]interface{}, 0, len(m.routes))
 	for _, key := range []string{"flight", "idep", "surveillance"} {
 		route := m.routes[key]
@@ -161,12 +171,23 @@ func (m *gatewayMonitor) handleRoutes(w http.ResponseWriter, _ *http.Request) {
 		routes = append(routes, route.snapshot())
 	}
 
-	writeMonitorJSON(w, map[string]interface{}{
+	payload := map[string]interface{}{
 		"service":    "gateway",
 		"started_at": m.startedAt.Format(time.RFC3339),
 		"timestamp":  time.Now().UTC().Format(time.RFC3339),
 		"routes":     routes,
-	})
+	}
+	if wantsHTML(r) {
+		writeGatewayJSONPage(w, gatewayJSONPageView{
+			Title:       "Gateway Routes",
+			Description: "Route-level counters for FLMO, IDEP, and Surveillance consumers.",
+			Payload:     payload,
+			RawJSONURL:  "/routes?format=json",
+			Nav:         gatewayNavLinks("/routes"),
+		})
+		return
+	}
+	writeMonitorJSON(w, payload)
 }
 
 func writeMonitorJSON(w http.ResponseWriter, payload interface{}) {
