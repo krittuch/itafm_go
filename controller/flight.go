@@ -23,6 +23,7 @@ type FlightControllerInterface interface {
 	UpdateEstimateFlightByDestination(string, string, string, string)
 	UpdateArrivalEstimateFlightByRoute(string, string, string, string, string)
 	UpdateRegister(string, string, string)
+	UpdateAircraft(string, string, string)
 }
 
 type FlightController struct {
@@ -158,6 +159,16 @@ func (f *FlightController) UpdateRegister(callsign string, tobt string, std stri
 	repo := repository.NewFlightRepository(f.DB)
 
 	err := repo.UpdateRegister(callsign, tobt, std)
+
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func (f *FlightController) UpdateAircraft(flightNumber string, aircraft string, std string) {
+	repo := repository.NewFlightRepository(f.DB)
+
+	err := repo.UpdateAircraft(flightNumber, aircraft, std)
 
 	if err != nil {
 		log.Println(err)

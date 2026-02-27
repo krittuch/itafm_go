@@ -341,8 +341,13 @@ func onCHGReceive(
 		updated = true
 	}
 
-	if reg, ok := parseCHGRegisterFromItem(itemRaw); ok && len(fmvData.TIME1) >= 4 {
-		std := strings.Join([]string{dateOfFlight, " ", fmvData.TIME1[:2], ":", fmvData.TIME1[2:4], ":00+00"}, "")
+	hasSTD := len(fmvData.TIME1) >= 4
+	std := ""
+	if hasSTD {
+		std = strings.Join([]string{dateOfFlight, " ", fmvData.TIME1[:2], ":", fmvData.TIME1[2:4], ":00+00"}, "")
+	}
+
+	if reg, ok := parseCHGRegisterFromItem(itemRaw); ok && hasSTD {
 		beforeFlight, beforeErr := flightController.GetFlightByTypeAndSchedule(flightNumber, "DEP", std)
 		flightController.UpdateRegister(flightNumber, reg, std)
 		if beforeErr == nil {
@@ -353,6 +358,23 @@ func onCHGReceive(
 					beforeFlight,
 					beforeFlight.ACRegister,
 					afterFlight.ACRegister,
+				)
+			}
+		}
+		updated = true
+	}
+
+	if aircraft, ok := parseCHGAircraftFromItem(itemRaw); ok && hasSTD {
+		beforeFlight, beforeErr := flightController.GetFlightByTypeAndSchedule(flightNumber, "DEP", std)
+		flightController.UpdateAircraft(flightNumber, aircraft, std)
+		if beforeErr == nil {
+			if afterFlight, afterErr := flightController.GetFlightByTypeAndSchedule(flightNumber, "DEP", std); afterErr == nil {
+				insertChangeLogIfChanged(
+					db,
+					"aircraft",
+					beforeFlight,
+					beforeFlight.AircraftType,
+					afterFlight.AircraftType,
 				)
 			}
 		}
@@ -411,6 +433,16 @@ func parseCHGDestinationTimeFromItem(item string) (string, string, bool) {
 func parseCHGRegisterFromItem(item string) (string, bool) {
 	normalized := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(item, "\r", " "), "\n", " "))
 	re := regexp.MustCompile(`\bREG/([A-Z0-9-]+)`)
+	match := re.FindStringSubmatch(normalized)
+	if len(match) != 2 {
+		return "", false
+	}
+	return match[1], true
+}
+
+func parseCHGAircraftFromItem(item string) (string, bool) {
+	normalized := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(item, "\r", " "), "\n", " "))
+	re := regexp.MustCompile(`-\s*9/([A-Z0-9-]+)/[A-Z0-9-]+`)
 	match := re.FindStringSubmatch(normalized)
 	if len(match) != 2 {
 		return "", false
@@ -514,6 +546,10 @@ func insertDebugChangeLogIfChanged(db *sql.DB, field string, flight model.Flight
 	if !isDebugChangeLogEnabled() {
 		return
 	}
+	insertChangeLogIfChanged(db, field, flight, oldValue, newValue)
+}
+
+func insertChangeLogIfChanged(db *sql.DB, field string, flight model.Flight, oldValue string, newValue string) {
 	if flight.ID <= 0 {
 		return
 	}

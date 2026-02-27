@@ -65,7 +65,7 @@ func (f *FlightRepository) GetFlight(fn string, std string) (model.Flight, error
 
 func (f *FlightRepository) GetFlightByTypeAndSchedule(fn string, flightType string, std string) (model.Flight, error) {
 	return f.findFlightForChangeLog(`
-		SELECT id, flight_number, schedule_flight_time, COALESCE(ac_register, ''), actual_flight_time, estimate_flight_time, COALESCE(canceled, FALSE), COALESCE(delayed, FALSE)
+		SELECT id, flight_number, schedule_flight_time, COALESCE(ac_register, ''), COALESCE(aircraft, ''), actual_flight_time, estimate_flight_time, COALESCE(canceled, FALSE), COALESCE(delayed, FALSE)
 		FROM flight_flight
 		WHERE flight_number = $1 AND type = $2 AND schedule_flight_time = $3
 		LIMIT 1`, fn, flightType, std)
@@ -73,7 +73,7 @@ func (f *FlightRepository) GetFlightByTypeAndSchedule(fn string, flightType stri
 
 func (f *FlightRepository) FindDepartureFlightByDestinationAndDate(flightNumber string, destination string, date string) (model.Flight, error) {
 	return f.findFlightForChangeLog(`
-		SELECT id, flight_number, schedule_flight_time, COALESCE(ac_register, ''), actual_flight_time, estimate_flight_time, COALESCE(canceled, FALSE), COALESCE(delayed, FALSE)
+		SELECT id, flight_number, schedule_flight_time, COALESCE(ac_register, ''), COALESCE(aircraft, ''), actual_flight_time, estimate_flight_time, COALESCE(canceled, FALSE), COALESCE(delayed, FALSE)
 		FROM flight_flight
 		WHERE flight_number = $1
 		  AND type = 'DEP'
@@ -86,7 +86,7 @@ func (f *FlightRepository) FindDepartureFlightByDestinationAndDate(flightNumber 
 
 func (f *FlightRepository) FindArrivalFlightByRouteAndDate(flightNumber string, departure string, destination string, date string) (model.Flight, error) {
 	return f.findFlightForChangeLog(`
-		SELECT id, flight_number, schedule_flight_time, COALESCE(ac_register, ''), actual_flight_time, estimate_flight_time, COALESCE(canceled, FALSE), COALESCE(delayed, FALSE)
+		SELECT id, flight_number, schedule_flight_time, COALESCE(ac_register, ''), COALESCE(aircraft, ''), actual_flight_time, estimate_flight_time, COALESCE(canceled, FALSE), COALESCE(delayed, FALSE)
 		FROM flight_flight
 		WHERE flight_number = $1
 		  AND type = 'ARR'
@@ -108,6 +108,7 @@ func (f *FlightRepository) findFlightForChangeLog(query string, args ...interfac
 		flightNumber       string
 		scheduleFlightTime *time.Time
 		acRegister         string
+		aircraftType       string
 		actualFlightTime   *time.Time
 		estimateFlightTime *time.Time
 		canceled           bool
@@ -119,6 +120,7 @@ func (f *FlightRepository) findFlightForChangeLog(query string, args ...interfac
 		&flightNumber,
 		&scheduleFlightTime,
 		&acRegister,
+		&aircraftType,
 		&actualFlightTime,
 		&estimateFlightTime,
 		&canceled,
@@ -131,6 +133,7 @@ func (f *FlightRepository) findFlightForChangeLog(query string, args ...interfac
 	return model.Flight{
 		ID:                 id,
 		ACRegister:         acRegister,
+		AircraftType:       aircraftType,
 		ActualFlightTime:   actualFlightTime,
 		EstimateFlightTime: estimateFlightTime,
 		Canceled:           canceled,
@@ -407,6 +410,27 @@ func (f *FlightRepository) UpdateRegister(flightNumber string, register string, 
 	defer stmt.Close()
 
 	_, err2 := stmt.Exec(register, flightNumber, std)
+
+	if err2 != nil {
+		return err2
+	}
+
+	return nil
+}
+
+func (f *FlightRepository) UpdateAircraft(flightNumber string, aircraft string, std string) error {
+	stmt, err := f.DB.Prepare(`UPDATE public.flight_flight SET 
+		aircraft = $1
+		where flight_number = $2 and
+		schedule_flight_time = $3`)
+
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	_, err2 := stmt.Exec(aircraft, flightNumber, std)
 
 	if err2 != nil {
 		return err2
