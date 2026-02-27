@@ -213,7 +213,7 @@ func onCNLReceive(
 	flightController.UpdateCanceledFlight(flightNumber, std)
 	if beforeErr == nil {
 		if afterFlight, afterErr := flightController.GetFlightByTypeAndSchedule(flightNumber, "DEP", std); afterErr == nil {
-			insertDebugChangeLogIfChanged(
+			insertChangeLogIfChanged(
 				db,
 				"canceled",
 				beforeFlight,
@@ -259,7 +259,7 @@ func onDLYReceive(
 	flightController.UpdateDelayedFlight(flightNumber, std)
 	if beforeErr == nil {
 		if afterFlight, afterErr := flightController.GetFlightByTypeAndSchedule(flightNumber, "DEP", std); afterErr == nil {
-			insertDebugChangeLogIfChanged(
+			insertChangeLogIfChanged(
 				db,
 				"delayed",
 				beforeFlight,
