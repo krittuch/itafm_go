@@ -19,7 +19,10 @@ type FlightControllerInterface interface {
 	UpdateDepartureFlight(string, string, string)
 	UpdateArrivalFlight(string, string, string)
 	UpdateCanceledFlight(string, string)
+	UpdateUncanceledFlight(string, string)
 	UpdateDelayedFlight(string, string)
+	UpdateScheduleFlightTimeByID(int, string)
+	UpdateDepartureEstimateFlightBySchedule(string, string, string)
 	UpdateEstimateFlightByDestination(string, string, string, string)
 	UpdateArrivalEstimateFlightByRoute(string, string, string, string, string)
 	UpdateRegister(string, string, string)
@@ -105,10 +108,40 @@ func (f *FlightController) UpdateCanceledFlight(flightNumber string, std string)
 	}
 }
 
+func (f *FlightController) UpdateUncanceledFlight(flightNumber string, std string) {
+	repo := repository.NewFlightRepository(f.DB)
+
+	err := repo.UpdateUncanceledFlight(flightNumber, std)
+
+	if err != nil {
+		log.Println(err)
+	}
+}
+
 func (f *FlightController) UpdateDelayedFlight(flightNumber string, std string) {
 	repo := repository.NewFlightRepository(f.DB)
 
 	err := repo.UpdateDelayedFlight(flightNumber, std)
+
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func (f *FlightController) UpdateScheduleFlightTimeByID(flightID int, std string) {
+	repo := repository.NewFlightRepository(f.DB)
+
+	err := repo.UpdateScheduleFlightTimeByID(flightID, std)
+
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func (f *FlightController) UpdateDepartureEstimateFlightBySchedule(flightNumber string, std string, estimate string) {
+	repo := repository.NewFlightRepository(f.DB)
+
+	err := repo.UpdateDepartureEstimateFlightBySchedule(flightNumber, std, estimate)
 
 	if err != nil {
 		log.Println(err)

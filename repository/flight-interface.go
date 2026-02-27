@@ -14,7 +14,10 @@ type FlightInterface interface {
 	UpdateDepartureFlight(string, string, string) error
 	UpdateArrivalFlight(string, string, string) error
 	UpdateCanceledFlight(string, string) error
+	UpdateUncanceledFlight(string, string) error
 	UpdateDelayedFlight(string, string) error
+	UpdateScheduleFlightTimeByID(int, string) error
+	UpdateDepartureEstimateFlightBySchedule(string, string, string) error
 	UpdateEstimateFlightByDestination(string, string, string, string) error
 	UpdateArrivalEstimateFlightByRoute(string, string, string, string, string) error
 	UpdateBay(string, string, string) error

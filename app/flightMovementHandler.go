@@ -24,21 +24,15 @@ func onFPLReceive(
 		return false
 	}
 
-	r, err2 := regexp.Compile(`(DOF\/)\w+`)
-
-	if err2 == nil {
-		dof := r.FindString(fplData.ITEM18)
-		fplData.DOF = strings.Replace(dof, `DOF/`, "", 1)
+	if dof, ok := parseFPLDOFFromItem18(fplData.ITEM18); ok {
+		fplData.DOF = dof
 	}
 
-	regex, err3 := regexp.Compile(`(REG\/)\w+`)
-
-	register := ""
-
-	if err3 == nil {
-		register = regex.FindString(fplData.ITEM18)
-		register = strings.Replace(register, `REG/`, "", 1)
+	if len(fplData.CALLSIGN) < 4 || len(fplData.DOF) < 6 || len(fplData.ETD) < 4 {
+		return false
 	}
+
+	register, hasRegister := parseCHGRegisterFromItem(fplData.ITEM18)
 
 	postFlight := model.PostFlight{
 		AircraftType: fplData.ACTYPE,
@@ -71,21 +65,76 @@ func onFPLReceive(
 
 	postFlight.FlightNumber = fmt.Sprint(iata, " ", flightNumber)
 
-	flightController.UpdateRegister(postFlight.FlightNumber, postFlight.Register, std)
+	beforeFlight, beforeErr := flightController.GetFlightByTypeAndSchedule(postFlight.FlightNumber, "DEP", std)
+	usedDOFETDFallback := false
+	if beforeErr != nil {
+		fallbackFlight, fallbackErr := flightController.FindDepartureFlightByDestinationAndDate(
+			postFlight.FlightNumber,
+			postFlight.NextStation,
+			dateOfFlight,
+		)
+		if fallbackErr == nil {
+			oldSchedule := formatFlightTimeForChangeLog(fallbackFlight.ScheduleFlightTime)
+			if oldSchedule != "" && oldSchedule != std {
+				flightController.UpdateScheduleFlightTimeByID(fallbackFlight.ID, std)
+				usedDOFETDFallback = true
+			}
+			beforeFlight = fallbackFlight
+			beforeErr = nil
+		}
+	}
 
-	flight, err := flightController.GetFlight(postFlight.FlightNumber, std)
+	flightController.UpdateUncanceledFlight(postFlight.FlightNumber, std)
+	if hasRegister {
+		flightController.UpdateRegister(postFlight.FlightNumber, postFlight.Register, std)
+	}
 
-	if err == nil {
+	hasEET := false
+	if estimateTime, ok := buildCHGArrivalEstimateFromEET(fplData.ITEM18, fplData.DOF, fplData.ETD); ok {
+		hasEET = true
+		flightController.UpdateDepartureEstimateFlightBySchedule(postFlight.FlightNumber, std, estimateTime)
+	}
 
-		flightChangeLogController := controller.NewFlightChangeLogController(db)
+	if beforeErr == nil {
+		if afterFlight, afterErr := flightController.GetFlightByTypeAndSchedule(postFlight.FlightNumber, "DEP", std); afterErr == nil {
+			if usedDOFETDFallback {
+				insertChangeLogIfChanged(
+					db,
+					"schedule_flight_time",
+					beforeFlight,
+					formatFlightTimeForChangeLog(beforeFlight.ScheduleFlightTime),
+					formatFlightTimeForChangeLog(afterFlight.ScheduleFlightTime),
+				)
+			}
 
-		err = flightChangeLogController.Insert(model.PostFlightChangeLog{
-			FlightID: uint(flight.ID),
-			Field:    "ac_register",
-			OldValue: flight.ACRegister,
-			NewValue: postFlight.Register,
-		})
+			insertChangeLogIfChanged(
+				db,
+				"canceled",
+				beforeFlight,
+				strconv.FormatBool(beforeFlight.Canceled),
+				strconv.FormatBool(afterFlight.Canceled),
+			)
 
+			if hasRegister {
+				insertChangeLogIfChanged(
+					db,
+					"ac_register",
+					beforeFlight,
+					beforeFlight.ACRegister,
+					afterFlight.ACRegister,
+				)
+			}
+
+			if hasEET {
+				insertChangeLogIfChanged(
+					db,
+					"estimate_flight_time",
+					beforeFlight,
+					formatFlightTimeForChangeLog(beforeFlight.EstimateFlightTime),
+					formatFlightTimeForChangeLog(afterFlight.EstimateFlightTime),
+				)
+			}
+		}
 	}
 
 	return true
@@ -433,6 +482,16 @@ func parseCHGDestinationTimeFromItem(item string) (string, string, bool) {
 func parseCHGRegisterFromItem(item string) (string, bool) {
 	normalized := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(item, "\r", " "), "\n", " "))
 	re := regexp.MustCompile(`\bREG/([A-Z0-9-]+)`)
+	match := re.FindStringSubmatch(normalized)
+	if len(match) != 2 {
+		return "", false
+	}
+	return match[1], true
+}
+
+func parseFPLDOFFromItem18(item18 string) (string, bool) {
+	normalized := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(item18, "\r", " "), "\n", " "))
+	re := regexp.MustCompile(`\bDOF/(\d{6})\b`)
 	match := re.FindStringSubmatch(normalized)
 	if len(match) != 2 {
 		return "", false

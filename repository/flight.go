@@ -281,6 +281,25 @@ func (f *FlightRepository) UpdateCanceledFlight(flightNumber string, std string)
 	return nil
 }
 
+func (f *FlightRepository) UpdateUncanceledFlight(flightNumber string, std string) error {
+	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET canceled=FALSE
+	WHERE flight_number = $1 and type = 'DEP' and schedule_flight_time = $2`)
+
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	_, err2 := stmt.Exec(flightNumber, std)
+
+	if err2 != nil {
+		return err2
+	}
+
+	return nil
+}
+
 func (f *FlightRepository) UpdateDelayedFlight(flightNumber string, std string) error {
 	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET delayed=TRUE
 	WHERE flight_number = $1 and type = 'DEP' and schedule_flight_time = $2`)
@@ -292,6 +311,44 @@ func (f *FlightRepository) UpdateDelayedFlight(flightNumber string, std string) 
 	defer stmt.Close()
 
 	_, err2 := stmt.Exec(flightNumber, std)
+
+	if err2 != nil {
+		return err2
+	}
+
+	return nil
+}
+
+func (f *FlightRepository) UpdateScheduleFlightTimeByID(flightID int, std string) error {
+	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET schedule_flight_time=$1
+	WHERE id = $2 and type = 'DEP'`)
+
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	_, err2 := stmt.Exec(std, flightID)
+
+	if err2 != nil {
+		return err2
+	}
+
+	return nil
+}
+
+func (f *FlightRepository) UpdateDepartureEstimateFlightBySchedule(flightNumber string, std string, estimate string) error {
+	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET estimate_flight_time = $1
+	WHERE flight_number = $2 and type = 'DEP' and schedule_flight_time = $3`)
+
+	if err != nil {
+		return err
+	}
+
+	defer stmt.Close()
+
+	_, err2 := stmt.Exec(estimate, flightNumber, std)
 
 	if err2 != nil {
 		return err2
