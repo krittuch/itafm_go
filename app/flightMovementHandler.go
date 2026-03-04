@@ -172,21 +172,29 @@ func onCMDReceive(
 
 	if fmvData.CMD == "DEP" {
 		timeStr = fmvData.TIME1
-		dateOfFlight = strings.Join([]string{"20", fmvData.DOF}, "")
-		if len(dateOfFlight) < 4 {
+		if len(timeStr) < 4 {
 			return false
 		}
-		dateOfFlight = dateOfFlight[:4] + "-" + dateOfFlight[4:6] + "-" + dateOfFlight[6:]
+		var ok bool
+		dateOfFlight, ok = normalizeAODSDOFDate(fmvData.DOF)
+		if !ok {
+			return false
+		}
 		std = strings.Join([]string{dateOfFlight, " ", timeStr[:2], ":", timeStr[2:4], ":00+00"}, "")
 	} else if fmvData.CMD == "ARR" {
 		timeStr = fmvData.TIME2
-		t := time.Now().UTC()
-		timeString := t.Format("2006-01-02 15:04:05")
-		dString := strings.Split(timeString, " ")[0]
-
-		fmvData.DOF = dString
+		if len(timeStr) < 4 {
+			return false
+		}
+		if parsedDate, ok := normalizeAODSDOFDate(fmvData.DOF); ok {
+			dateOfFlight = parsedDate
+		} else {
+			t := time.Now().UTC()
+			timeString := t.Format("2006-01-02 15:04:05")
+			dateOfFlight = strings.Split(timeString, " ")[0]
+		}
 		std = strings.Join([]string{
-			dString, " ",
+			dateOfFlight, " ",
 			timeStr[:2], ":",
 			timeStr[2:4], ":00+00",
 		}, "")
@@ -195,10 +203,10 @@ func onCMDReceive(
 	}
 
 	if fmvData.CMD == "DEP" {
-		beforeFlight, beforeErr := flightController.GetFlightByTypeAndSchedule(flightNumber, "DEP", std)
-		flightController.UpdateDepartureFlight(flightNumber, fmvData.DOF, std)
+		beforeFlight, beforeErr := flightController.GetFlightByTypeAndDate(flightNumber, "DEP", dateOfFlight)
+		flightController.UpdateDepartureFlight(flightNumber, dateOfFlight, std)
 		if beforeErr == nil {
-			if afterFlight, afterErr := flightController.GetFlightByTypeAndSchedule(flightNumber, "DEP", std); afterErr == nil {
+			if afterFlight, afterErr := flightController.GetFlightByTypeAndDate(flightNumber, "DEP", dateOfFlight); afterErr == nil {
 				insertDebugChangeLogIfChanged(
 					db,
 					"actual_flight_time",
@@ -209,10 +217,10 @@ func onCMDReceive(
 			}
 		}
 	} else if fmvData.CMD == "ARR" {
-		beforeFlight, beforeErr := flightController.GetFlightByTypeAndSchedule(flightNumber, "ARR", std)
-		flightController.UpdateArrivalFlight(flightNumber, fmvData.DOF, std)
+		beforeFlight, beforeErr := flightController.GetFlightByTypeAndDate(flightNumber, "ARR", dateOfFlight)
+		flightController.UpdateArrivalFlight(flightNumber, dateOfFlight, std)
 		if beforeErr == nil {
-			if afterFlight, afterErr := flightController.GetFlightByTypeAndSchedule(flightNumber, "ARR", std); afterErr == nil {
+			if afterFlight, afterErr := flightController.GetFlightByTypeAndDate(flightNumber, "ARR", dateOfFlight); afterErr == nil {
 				insertDebugChangeLogIfChanged(
 					db,
 					"actual_flight_time",
@@ -225,6 +233,25 @@ func onCMDReceive(
 	}
 
 	return true
+}
+
+func normalizeAODSDOFDate(dof string) (string, bool) {
+	trimmed := strings.TrimSpace(dof)
+	if len(trimmed) == 6 {
+		if ok, _ := regexp.MatchString(`^\d{6}$`, trimmed); !ok {
+			return "", false
+		}
+		full := "20" + trimmed
+		return full[:4] + "-" + full[4:6] + "-" + full[6:], true
+	}
+
+	if len(trimmed) == 10 {
+		if ok, _ := regexp.MatchString(`^\d{4}-\d{2}-\d{2}$`, trimmed); ok {
+			return trimmed, true
+		}
+	}
+
+	return "", false
 }
 
 func onCNLReceive(

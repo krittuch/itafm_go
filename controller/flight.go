@@ -11,6 +11,7 @@ import (
 type FlightControllerInterface interface {
 	GetFlight(string, string) (model.Flight, error)
 	GetFlightByTypeAndSchedule(string, string, string) (model.Flight, error)
+	GetFlightByTypeAndDate(string, string, string) (model.Flight, error)
 	FindDepartureFlightByDestinationAndDate(string, string, string) (model.Flight, error)
 	FindArrivalFlightByRouteAndDate(string, string, string, string) (model.Flight, error)
 	InsertFlight(*model.PostFlight)
@@ -47,6 +48,11 @@ func (f *FlightController) GetFlight(flightNumber string, std string) (model.Fli
 func (f *FlightController) GetFlightByTypeAndSchedule(flightNumber string, flightType string, std string) (model.Flight, error) {
 	repo := repository.NewFlightRepository(f.DB)
 	return repo.GetFlightByTypeAndSchedule(flightNumber, flightType, std)
+}
+
+func (f *FlightController) GetFlightByTypeAndDate(flightNumber string, flightType string, date string) (model.Flight, error) {
+	repo := repository.NewFlightRepository(f.DB)
+	return repo.GetFlightByTypeAndDate(flightNumber, flightType, date)
 }
 
 func (f *FlightController) FindDepartureFlightByDestinationAndDate(flightNumber string, destination string, date string) (model.Flight, error) {

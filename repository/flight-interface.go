@@ -7,6 +7,7 @@ import (
 type FlightInterface interface {
 	GetFlight(string, string) (model.Flight, error)
 	GetFlightByTypeAndSchedule(string, string, string) (model.Flight, error)
+	GetFlightByTypeAndDate(string, string, string) (model.Flight, error)
 	FindDepartureFlightByDestinationAndDate(string, string, string) (model.Flight, error)
 	FindArrivalFlightByRouteAndDate(string, string, string, string) (model.Flight, error)
 	InsertFlight(*model.PostFlight)

@@ -71,6 +71,18 @@ func (f *FlightRepository) GetFlightByTypeAndSchedule(fn string, flightType stri
 		LIMIT 1`, fn, flightType, std)
 }
 
+func (f *FlightRepository) GetFlightByTypeAndDate(fn string, flightType string, date string) (model.Flight, error) {
+	return f.findFlightForChangeLog(`
+		SELECT id, flight_number, schedule_flight_time, COALESCE(ac_register, ''), COALESCE(aircraft, ''), actual_flight_time, estimate_flight_time, COALESCE(canceled, FALSE), COALESCE(delayed, FALSE)
+		FROM flight_flight
+		WHERE flight_number = $1
+		  AND type = $2
+		  AND schedule_flight_time >= $3::date
+		  AND schedule_flight_time < ($3::date + INTERVAL '1 day')
+		ORDER BY schedule_flight_time ASC, id ASC
+		LIMIT 1`, fn, flightType, date)
+}
+
 func (f *FlightRepository) FindDepartureFlightByDestinationAndDate(flightNumber string, destination string, date string) (model.Flight, error) {
 	return f.findFlightForChangeLog(`
 		SELECT id, flight_number, schedule_flight_time, COALESCE(ac_register, ''), COALESCE(aircraft, ''), actual_flight_time, estimate_flight_time, COALESCE(canceled, FALSE), COALESCE(delayed, FALSE)
@@ -225,7 +237,10 @@ func (f *FlightRepository) InsertFlight(flight *model.PostFlight) error {
 func (f *FlightRepository) UpdateDepartureFlight(flightNumber string, date string, datetime string) error {
 
 	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET actual_flight_time=$1 
-	WHERE flight_number = $2 and type = 'DEP' and schedule_flight_time = $3`)
+	WHERE flight_number = $2 and
+	type = 'DEP' and
+	schedule_flight_time >= $3::date and
+	schedule_flight_time < ($3::date + INTERVAL '1 day')`)
 
 	if err != nil {
 		return err
@@ -245,7 +260,10 @@ func (f *FlightRepository) UpdateDepartureFlight(flightNumber string, date strin
 func (f *FlightRepository) UpdateArrivalFlight(flightNumber string, date string, datetime string) error {
 
 	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET actual_flight_time=$1 
-	WHERE flight_number = $2 and type = 'ARR' and schedule_flight_time = $3`)
+	WHERE flight_number = $2 and
+	type = 'ARR' and
+	schedule_flight_time >= $3::date and
+	schedule_flight_time < ($3::date + INTERVAL '1 day')`)
 
 	if err != nil {
 		return err
