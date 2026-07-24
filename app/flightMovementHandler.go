@@ -14,6 +14,21 @@ import (
 	"aerothai/itafm/model"
 )
 
+// Compiled once at package init instead of per message; these run on every
+// Kafka message on the flight movement and IDEP topics.
+var (
+	airlineCodeRegex        = regexp.MustCompile(`^[A-Z]{3}`)
+	numberRegex             = regexp.MustCompile(`\d+`)
+	sixDigitDateRegex       = regexp.MustCompile(`^\d{6}$`)
+	isoDateRegex            = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	chgDestinationTimeRegex = regexp.MustCompile(`-\d+/([A-Z]{4})(\d{4})`)
+	chgRegisterRegex        = regexp.MustCompile(`\bREG/([A-Z0-9-]+)`)
+	fplDOFRegex             = regexp.MustCompile(`\bDOF/(\d{6})\b`)
+	chgAircraftRegex        = regexp.MustCompile(`-\s*9/([A-Z0-9-]+)/[A-Z0-9-]+`)
+	firTokenRegex           = regexp.MustCompile(`^[A-Z]{4}(\d{4})$`)
+	rawDurationRegex        = regexp.MustCompile(`^(\d{4})$`)
+)
+
 func onFPLReceive(
 	body []byte,
 	db *sql.DB,
@@ -41,7 +56,6 @@ func onFPLReceive(
 		Register:     register,
 	}
 
-	airlineCodeRegex := regexp.MustCompile(`^[A-Z]{3}`)
 	icaoCode := airlineCodeRegex.FindString(fplData.CALLSIGN)
 
 	iata, success := ConvertToIATA(icaoCode)
@@ -50,7 +64,6 @@ func onFPLReceive(
 		return false
 	}
 
-	numberRegex := regexp.MustCompile(`\d+`)
 	matchString := numberRegex.FindString(fplData.CALLSIGN)
 	if len(matchString) <= 0 {
 		return false
@@ -154,7 +167,6 @@ func onCMDReceive(
 
 	airlineController := controller.NewAirlineController(db)
 
-	airlineCodeRegex := regexp.MustCompile(`^[A-Z]{3}`)
 	icaoCode := airlineCodeRegex.FindString(fmvData.CALLSIGN)
 
 	airline, errAirline := airlineController.GetAirline(icaoCode)
@@ -238,7 +250,7 @@ func onCMDReceive(
 func normalizeAODSDOFDate(dof string) (string, bool) {
 	trimmed := strings.TrimSpace(dof)
 	if len(trimmed) == 6 {
-		if ok, _ := regexp.MatchString(`^\d{6}$`, trimmed); !ok {
+		if !sixDigitDateRegex.MatchString(trimmed) {
 			return "", false
 		}
 		full := "20" + trimmed
@@ -246,7 +258,7 @@ func normalizeAODSDOFDate(dof string) (string, bool) {
 	}
 
 	if len(trimmed) == 10 {
-		if ok, _ := regexp.MatchString(`^\d{4}-\d{2}-\d{2}$`, trimmed); ok {
+		if isoDateRegex.MatchString(trimmed) {
 			return trimmed, true
 		}
 	}
@@ -268,7 +280,6 @@ func onCNLReceive(
 
 	airlineController := controller.NewAirlineController(db)
 
-	airlineCodeRegex := regexp.MustCompile(`^[A-Z]{3}`)
 	icaoCode := airlineCodeRegex.FindString(fmvData.CALLSIGN)
 
 	airline, errAirline := airlineController.GetAirline(icaoCode)
@@ -314,7 +325,6 @@ func onDLYReceive(
 
 	airlineController := controller.NewAirlineController(db)
 
-	airlineCodeRegex := regexp.MustCompile(`^[A-Z]{3}`)
 	icaoCode := airlineCodeRegex.FindString(fmvData.CALLSIGN)
 
 	airline, errAirline := airlineController.GetAirline(icaoCode)
@@ -383,7 +393,6 @@ func onCHGReceive(
 		}
 	}
 
-	airlineCodeRegex := regexp.MustCompile(`^[A-Z]{3}`)
 	icaoCode := airlineCodeRegex.FindString(fmvData.CALLSIGN)
 	if len(icaoCode) != 3 {
 		return false
@@ -498,8 +507,7 @@ func onCHGReceive(
 func parseCHGDestinationTimeFromItem(item string) (string, string, bool) {
 	normalized := strings.ToUpper(strings.TrimSpace(item))
 	// Example: "-13/VTBD0045" (may have trailing CRLF or more tokens)
-	re := regexp.MustCompile(`-\d+/([A-Z]{4})(\d{4})`)
-	match := re.FindStringSubmatch(normalized)
+	match := chgDestinationTimeRegex.FindStringSubmatch(normalized)
 	if len(match) != 3 {
 		return "", "", false
 	}
@@ -508,8 +516,7 @@ func parseCHGDestinationTimeFromItem(item string) (string, string, bool) {
 
 func parseCHGRegisterFromItem(item string) (string, bool) {
 	normalized := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(item, "\r", " "), "\n", " "))
-	re := regexp.MustCompile(`\bREG/([A-Z0-9-]+)`)
-	match := re.FindStringSubmatch(normalized)
+	match := chgRegisterRegex.FindStringSubmatch(normalized)
 	if len(match) != 2 {
 		return "", false
 	}
@@ -518,8 +525,7 @@ func parseCHGRegisterFromItem(item string) (string, bool) {
 
 func parseFPLDOFFromItem18(item18 string) (string, bool) {
 	normalized := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(item18, "\r", " "), "\n", " "))
-	re := regexp.MustCompile(`\bDOF/(\d{6})\b`)
-	match := re.FindStringSubmatch(normalized)
+	match := fplDOFRegex.FindStringSubmatch(normalized)
 	if len(match) != 2 {
 		return "", false
 	}
@@ -528,8 +534,7 @@ func parseFPLDOFFromItem18(item18 string) (string, bool) {
 
 func parseCHGAircraftFromItem(item string) (string, bool) {
 	normalized := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(item, "\r", " "), "\n", " "))
-	re := regexp.MustCompile(`-\s*9/([A-Z0-9-]+)/[A-Z0-9-]+`)
-	match := re.FindStringSubmatch(normalized)
+	match := chgAircraftRegex.FindStringSubmatch(normalized)
 	if len(match) != 2 {
 		return "", false
 	}
@@ -572,8 +577,6 @@ func parseCHGLastEETDurationHHMM(item string) (string, bool) {
 		return "", false
 	}
 
-	firTokenRegex := regexp.MustCompile(`^[A-Z]{4}(\d{4})$`)
-	rawDurationRegex := regexp.MustCompile(`^(\d{4})$`)
 	last := ""
 
 	for _, token := range tokens {

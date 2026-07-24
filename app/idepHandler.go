@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -28,7 +27,6 @@ func onIDEPReceive(
 		Bay: &data.DepartureParkingStand,
 	}
 
-	airlineCodeRegex := regexp.MustCompile(`^[A-Z]{3}`)
 	icaoCode := airlineCodeRegex.FindString(data.AircraftID)
 
 	iata, success := ConvertToIATA(icaoCode)
@@ -38,7 +36,6 @@ func onIDEPReceive(
 	}
 
 	// Get numberic number without 0 prefix from data.AircraftID
-	numberRegex := regexp.MustCompile(`\d+`)
 	matchString := numberRegex.FindString(data.AircraftID)
 	if len(matchString) <= 0 {
 		return false
