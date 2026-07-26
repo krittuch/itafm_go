@@ -163,9 +163,9 @@ func (f *FlightRepository) UpdateFlight(flight *model.PatchFlight) error {
 		qString += fmt.Sprintf(`actual_flight_time = '%s', `, flight.ActualFlightTime.Format("2006-01-02 15:04:05"))
 	}
 
-	if flight.EstimateFlightTime != nil {
-		qString += fmt.Sprintf(`estimate_flight_time = '%s', `, flight.EstimateFlightTime.Format("2006-01-02 15:04:05"))
-	}
+	// if flight.EstimateFlightTime != nil {
+	// 	qString += fmt.Sprintf(`estimate_flight_time = '%s', `, flight.EstimateFlightTime.Format("2006-01-02 15:04:05"))
+	// }
 
 	if flight.ScheduleFlightTime != nil {
 		qString += fmt.Sprintf(`schedule_flight_time = '%s', `, flight.ScheduleFlightTime.Format("2006-01-02 15:04:05"))

@@ -103,9 +103,9 @@ func onFPLReceive(
 	}
 
 	hasEET := false
-	if estimateTime, ok := buildCHGArrivalEstimateFromEET(fplData.ITEM18, fplData.DOF, fplData.ETD); ok {
+	if _, ok := buildCHGArrivalEstimateFromEET(fplData.ITEM18, fplData.DOF, fplData.ETD); ok {
 		hasEET = true
-		flightController.UpdateDepartureEstimateFlightBySchedule(postFlight.FlightNumber, std, estimateTime)
+		// flightController.UpdateDepartureEstimateFlightBySchedule(postFlight.FlightNumber, std, estimateTime)
 	}
 
 	if beforeErr == nil {
@@ -409,9 +409,10 @@ func onCHGReceive(
 	flightNumber := fmt.Sprint(airline.IATA, " ", fmvData.CALLSIGN[3:])
 
 	if ok {
+		_ = hhmm
 		beforeFlight, beforeErr := flightController.FindDepartureFlightByDestinationAndDate(flightNumber, destinationCode, dateOfFlight)
-		estimateTime := strings.Join([]string{dateOfFlight, " ", hhmm[:2], ":", hhmm[2:4], ":00+00"}, "")
-		flightController.UpdateEstimateFlightByDestination(flightNumber, destinationCode, dateOfFlight, estimateTime)
+		// estimateTime := strings.Join([]string{dateOfFlight, " ", hhmm[:2], ":", hhmm[2:4], ":00+00"}, "")
+		// flightController.UpdateEstimateFlightByDestination(flightNumber, destinationCode, dateOfFlight, estimateTime)
 		if beforeErr == nil {
 			if afterFlight, afterErr := flightController.FindDepartureFlightByDestinationAndDate(flightNumber, destinationCode, dateOfFlight); afterErr == nil {
 				insertDebugChangeLogIfChanged(
@@ -467,6 +468,7 @@ func onCHGReceive(
 	}
 
 	if arrivalEstimate, ok := buildCHGArrivalEstimateFromEET(itemRaw, fmvData.DOF, fmvData.TIME1); ok {
+		_ = arrivalEstimate
 		departureCode := strings.ToUpper(strings.TrimSpace(fmvData.DEPARTURE))
 		destinationCode := strings.ToUpper(strings.TrimSpace(fmvData.DESTINATION))
 		beforeFlight, beforeErr := flightController.FindArrivalFlightByRouteAndDate(
@@ -475,13 +477,13 @@ func onCHGReceive(
 			destinationCode,
 			dateOfFlight,
 		)
-		flightController.UpdateArrivalEstimateFlightByRoute(
-			flightNumber,
-			departureCode,
-			destinationCode,
-			dateOfFlight,
-			arrivalEstimate,
-		)
+		// flightController.UpdateArrivalEstimateFlightByRoute(
+		// 	flightNumber,
+		// 	departureCode,
+		// 	destinationCode,
+		// 	dateOfFlight,
+		// 	arrivalEstimate,
+		// )
 		if beforeErr == nil {
 			if afterFlight, afterErr := flightController.FindArrivalFlightByRouteAndDate(
 				flightNumber,
