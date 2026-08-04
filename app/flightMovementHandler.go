@@ -213,10 +213,11 @@ func onCMDReceive(
 	} else {
 		return false
 	}
+	_ = std // actual_flight_time writes from DEP/ARR messages are temporarily disabled below.
 
 	if fmvData.CMD == "DEP" {
 		beforeFlight, beforeErr := flightController.GetFlightByTypeAndDate(flightNumber, "DEP", dateOfFlight)
-		flightController.UpdateDepartureFlight(flightNumber, dateOfFlight, std)
+		// flightController.UpdateDepartureFlight(flightNumber, dateOfFlight, std)
 		if beforeErr == nil {
 			if afterFlight, afterErr := flightController.GetFlightByTypeAndDate(flightNumber, "DEP", dateOfFlight); afterErr == nil {
 				insertDebugChangeLogIfChanged(
@@ -230,7 +231,7 @@ func onCMDReceive(
 		}
 	} else if fmvData.CMD == "ARR" {
 		beforeFlight, beforeErr := flightController.GetFlightByTypeAndDate(flightNumber, "ARR", dateOfFlight)
-		flightController.UpdateArrivalFlight(flightNumber, dateOfFlight, std)
+		// flightController.UpdateArrivalFlight(flightNumber, dateOfFlight, std)
 		if beforeErr == nil {
 			if afterFlight, afterErr := flightController.GetFlightByTypeAndDate(flightNumber, "ARR", dateOfFlight); afterErr == nil {
 				insertDebugChangeLogIfChanged(
