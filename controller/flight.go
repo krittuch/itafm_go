@@ -174,10 +174,10 @@ func (f *FlightController) UpdateArrivalEstimateFlightByRoute(flightNumber strin
 	}
 }
 
-func (f *FlightController) UpdateBay(flightNumber string, std string, bay string) {
+func (f *FlightController) UpdateBay(flightNumber string, eobt string, bay string) {
 	repo := repository.NewFlightRepository(f.DB)
 
-	err := repo.UpdateBay(flightNumber, std, bay)
+	err := repo.UpdateBay(flightNumber, eobt, bay)
 
 	if err != nil {
 		log.Println(err)

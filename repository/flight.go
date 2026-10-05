@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"aerothai/itafm/model"
@@ -451,11 +452,29 @@ func (f *FlightRepository) UpdateTOBTFlight(flightNumber string, datetime string
 	return nil
 }
 
-func (f *FlightRepository) UpdateBay(flightNumber string, std string, bay string) error {
-	stmt, err := f.DB.Prepare(`UPDATE flight_flight SET bay=$1 
-	WHERE flight_number = $2 and 
-	schedule_flight_time >= CURRENT_DATE and 
-	schedule_flight_time <= CURRENT_DATE + INTERVAL '1 day'`)
+// UpdateBay sets the bay of the DEP flight whose STD is within 12 hours of the
+// IDEP EOBT and records the change in flight_flightchangelog.
+func (f *FlightRepository) UpdateBay(flightNumber string, eobt string, bay string) error {
+	if !strings.Contains(eobt, "+") && !strings.Contains(eobt, "Z") {
+		eobt = eobt + "+00"
+	}
+
+	stmt, err := f.DB.Prepare(`WITH changed AS (
+		SELECT id, COALESCE(bay, '') AS old_bay FROM flight_flight
+		WHERE flight_number = $2 and
+		type = 'DEP' and
+		schedule_flight_time BETWEEN $3::timestamptz - INTERVAL '12 hours'
+			AND $3::timestamptz + INTERVAL '12 hours' and
+		COALESCE(bay, '') <> $1::text
+		FOR UPDATE
+	), updated AS (
+		UPDATE flight_flight AS flight SET bay = $1::text
+		FROM changed
+		WHERE flight.id = changed.id
+		RETURNING flight.id, changed.old_bay
+	)
+	INSERT INTO flight_flightchangelog (flight_id, field, old_value, new_value, created_at, updated_at)
+	SELECT id, 'bay', old_bay, $1::text, NOW(), NOW() FROM updated`)
 
 	if err != nil {
 		return err
@@ -463,7 +482,7 @@ func (f *FlightRepository) UpdateBay(flightNumber string, std string, bay string
 
 	defer stmt.Close()
 
-	_, err2 := stmt.Exec(bay, flightNumber)
+	_, err2 := stmt.Exec(bay, flightNumber, eobt)
 
 	if err2 != nil {
 		return err2
