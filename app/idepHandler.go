@@ -45,8 +45,8 @@ func onIDEPReceive(
 	patchFlight.FlightNumber = fmt.Sprint(iata, " ", flightNumber)
 
 	updated := false
-	if *patchFlight.Bay != "" {
-		flightController.UpdateBay(patchFlight.FlightNumber, data.EOBT, *patchFlight.Bay)
+	if bay, eobt, ok := idepBayUpdate(data); ok {
+		flightController.UpdateBay(patchFlight.FlightNumber, eobt, bay)
 		updated = true
 	}
 
@@ -56,4 +56,17 @@ func onIDEPReceive(
 	}
 
 	return updated
+}
+
+// idepBayUpdate returns the bay and EOBT to write for an IDEP message.
+// DepartureParkingStand is a stand at the departure airport, so only a known
+// VTBS stand on a VTBS departure is used; other airports' stands used to
+// overwrite the bay of the same flight number arriving at VTBS.
+func idepBayUpdate(data model.IDEP) (string, string, bool) {
+	bay := strings.TrimSpace(data.DepartureParkingStand)
+	eobt := strings.TrimSpace(data.EOBT)
+	if strings.TrimSpace(data.Departure) != "VTBS" || eobt == "" || !isVTBSStand(bay) {
+		return "", "", false
+	}
+	return bay, eobt, true
 }
