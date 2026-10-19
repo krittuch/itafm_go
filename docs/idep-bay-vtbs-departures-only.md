@@ -30,3 +30,13 @@ It also wrote no change log. An IDEP for TG 204 departing another airport theref
 ## Not covered
 
 The service has not been deployed. Arrival bays still come only from the Thai Airways feed (`tgw_go`). IDEP `ArrivalParkingStand` is still ignored.
+
+## Follow-up 2026-10-19: flip still seen on VZ 103 (ARR), dev server
+
+On 2026-10-19, on the dev server (DB `192.87.110.14`), the ARR flight VZ 103 showed the same pattern: `6 -> A2` was logged every 5 minutes, and nothing logged the writes back to `6`.
+
+The current code can't produce this. `6` fails all three gates: it isn't in `vtbsStandList`, the IDEP for an arrival isn't `Departure == "VTBS"`, and `UpdateBay` only touches `type = 'DEP'`. It would also be logged. No other code in this repo writes `bay`; the `UpdateFlight` repository method has no caller. `go test ./app/` passes.
+
+The likely cause is that the dev gateway is still running the pre-fix build. `Dockerfile.dev` (same as `Dockerfile.prod`) copies the source into `/app` at image build time, and `air` builds from `/app`. `development.yml` mounts the repo at `/usr/src/app/`, so `git pull` on the server changes nothing in the running container. The fix is on `origin/dev` and `origin/production` but not on `origin/main`, so the server checkout must be on `dev` before rebuilding with `docker compose -f development.yml up -d --build gateway`.
+
+Verified: `docker exec itafm_aods_gw_dev grep -c idepBayUpdate /app/app/idepHandler.go` returned `0` on the dev server, so the container was running the pre-fix code.

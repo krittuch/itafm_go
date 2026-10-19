@@ -1,0 +1,108 @@
+name: dev
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # A push whose commit is the merge commit of a PR into dev was already
+  # tested on that PR, so it goes straight to deploy.
+  classify:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      pr_merge: ${{ steps.check.outputs.pr_merge }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+            --jq "[.[] | select(.merged_at != null and .merge_commit_sha == \"${GITHUB_SHA}\" and .base.ref == \"dev\")] | length")
+          if [ "$count" -gt 0 ]; then
+            echo "pr_merge=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pr_merge=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    needs: classify
+    if: ${{ !cancelled() && needs.classify.outputs.pr_merge != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - run: go vet ./...
+      - run: go test ./...
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          cache-dependency-path: java-broker/pom.xml
+
+      - run: mvn -B -q -DskipTests package
+        working-directory: java-broker
+
+  deploy:
+    needs: [classify, test]
+    if: >-
+      !cancelled() &&
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/dev' &&
+      (needs.test.result == 'success' ||
+       (needs.test.result == 'skipped' && needs.classify.outputs.pr_merge == 'true'))
+    # Fork PRs never reach this job, so outside code never runs on the dev server.
+    runs-on: [self-hosted, itafm-dev]
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
+    env:
+      COMPOSE_FILE: development.yml
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reuse the project of the running stack so its named volumes are kept.
+      - name: Resolve compose project
+        run: |
+          project=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' itafm_aods_gw_dev 2>/dev/null || true)
+          echo "COMPOSE_PROJECT_NAME=${project:-itafm_go}" >> "$GITHUB_ENV"
+
+      - name: Build and start dev stack
+        run: docker compose up -d --build
+
+      # A running container from an older image is what left the IDEP bay fix undeployed.
+      - name: Check containers run the new images
+        run: |
+          for c in itafm_aods_gw_dev itafm_amq_kafka_broker_dev; do
+            built=$(docker image inspect -f '{{.Id}}' "$(docker inspect -f '{{.Config.Image}}' "$c")")
+            running=$(docker inspect -f '{{.Image}}' "$c")
+            if [ "$built" != "$running" ]; then
+              echo "$c runs $running, expected $built"
+              exit 1
+            fi
+          done
+
+      - name: Wait for monitors
+        run: |
+          for url in http://127.0.0.1:18081/health http://127.0.0.1:18080/health; do
+            for _ in $(seq 1 36); do
+              curl -fsS "$url" && echo && continue 2
+              sleep 5
+            done
+            echo "$url not healthy after 3 minutes"
+            docker compose logs --tail 100
+            exit 1
+          done
