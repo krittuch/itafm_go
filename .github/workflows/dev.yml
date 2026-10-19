@@ -9,33 +9,65 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
-  # A push whose commit is the merge commit of a PR into dev was already
-  # tested on that PR, so it goes straight to deploy.
+  # A push that is the merge of a PR into dev, whose own run of this workflow
+  # passed, goes straight to deploy. Same rule as AGOS_DJ's ci.yml.
   classify:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
     outputs:
-      pr_merge: ${{ steps.check.outputs.pr_merge }}
+      skip_checks: ${{ steps.merged_pr.outputs.skip_checks }}
     steps:
-      - id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          count=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
-            --jq "[.[] | select(.merged_at != null and .merge_commit_sha == \"${GITHUB_SHA}\" and .base.ref == \"dev\")] | length")
-          if [ "$count" -gt 0 ]; then
-            echo "pr_merge=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "pr_merge=false" >> "$GITHUB_OUTPUT"
-          fi
+      - id: merged_pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.setOutput('skip_checks', 'false');
+            const {owner, repo} = context.repo;
+            const sha = context.sha;
+            const before = context.payload.before;
+            try {
+              const {data: commit} = await github.request(
+                'GET /repos/{owner}/{repo}/commits/{commit_sha}',
+                {owner, repo, commit_sha: sha}
+              );
+              // A single merged PR advances dev from its previous tip.
+              // Multi-commit pushes and rebases are tested instead.
+              if (commit.parents[0]?.sha !== before) return;
+
+              const {data: prs} = await github.request(
+                'GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls',
+                {owner, repo, commit_sha: sha}
+              );
+              for (const pr of prs) {
+                if (!pr.merged_at || pr.base.ref !== 'dev' || pr.merge_commit_sha !== sha) continue;
+                const {data} = await github.request(
+                  'GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs',
+                  {owner, repo, workflow_id: 'dev.yml', event: 'pull_request', head_sha: pr.head.sha, per_page: 100}
+                );
+                const runs = data.workflow_runs.filter(run => run.head_branch === pr.head.ref);
+                runs.sort((a, b) => b.id - a.id);
+                if (runs[0]?.status === 'completed' && runs[0]?.conclusion === 'success') {
+                  core.info(`Reusing successful PR #${pr.number} run ${runs[0].id}`);
+                  core.setOutput('skip_checks', 'true');
+                  return;
+                }
+              }
+              core.info('No successful merged PR run found; running checks on dev.');
+            } catch (error) {
+              core.warning(`PR lookup failed; running checks on dev: ${error.message}`);
+            }
 
   test:
     needs: classify
-    if: ${{ !cancelled() && needs.classify.outputs.pr_merge != 'true' }}
+    if: ${{ !cancelled() && needs.classify.outputs.skip_checks != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -63,34 +95,87 @@ jobs:
       github.event_name != 'pull_request' &&
       github.ref == 'refs/heads/dev' &&
       (needs.test.result == 'success' ||
-       (needs.test.result == 'skipped' && needs.classify.outputs.pr_merge == 'true'))
+       (needs.test.result == 'skipped' && needs.classify.outputs.skip_checks == 'true'))
     # Fork PRs never reach this job, so outside code never runs on the dev server.
-    runs-on: [self-hosted, itafm-dev]
+    runs-on: [self-hosted, Linux]
+    timeout-minutes: 30
     concurrency:
       group: deploy-dev
       cancel-in-progress: false
     env:
-      COMPOSE_FILE: development.yml
+      STACK: itafm_go
+      ITAFM_GIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
-      # Reuse the project of the running stack so its named volumes are kept.
-      - name: Resolve compose project
+      - name: Check Swarm and the stack's volumes
         run: |
-          project=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' itafm_aods_gw_dev 2>/dev/null || true)
-          echo "COMPOSE_PROJECT_NAME=${project:-itafm_go}" >> "$GITHUB_ENV"
+          state=$(docker info --format '{{.Swarm.LocalNodeState}}')
+          if [ "$state" != active ]; then
+            echo "Swarm is not active on this node (state: $state)" >&2
+            exit 1
+          fi
+          for volume in itafm_go_aods_archive_db_dev itafm_go_kafka_data_dev; do
+            docker volume inspect "$volume" >/dev/null
+          done
 
-      - name: Build and start dev stack
-        run: docker compose up -d --build
-
-      # A running container from an older image is what left the IDEP bay fix undeployed.
-      - name: Check containers run the new images
+      - name: Build images
         run: |
-          for c in itafm_aods_gw_dev itafm_amq_kafka_broker_dev; do
-            built=$(docker image inspect -f '{{.Id}}' "$(docker inspect -f '{{.Config.Image}}' "$c")")
-            running=$(docker inspect -f '{{.Image}}' "$c")
-            if [ "$built" != "$running" ]; then
-              echo "$c runs $running, expected $built"
+          timeout --signal=TERM --kill-after=30s 15m \
+            docker build -f Dockerfile.dev -t "itafm_go-gateway:${ITAFM_GIT_SHA}" .
+          timeout --signal=TERM --kill-after=30s 15m \
+            docker build -f java-broker/Dockerfile -t "itafm_go-java_broker:${ITAFM_GIT_SHA}" .
+
+      - name: Remove compose containers (first Swarm deploy only)
+        run: |
+          # Never add -v: the stack reuses the compose volumes. Skipped once no
+          # compose container is left, because the stack's own network is also
+          # named itafm_go_default.
+          if docker ps -aq --filter label=com.docker.compose.project=itafm_go | grep -q .; then
+            docker compose -p itafm_go -f development.yml down --remove-orphans
+          fi
+
+      - name: Deploy Swarm stack
+        run: |
+          timeout --signal=TERM --kill-after=10s 3m \
+            docker stack deploy --resolve-image never -c stack.development.yml "$STACK"
+
+      - name: Wait for every service to run its new task
+        run: |
+          services="aods_archive_db itafm_kafka java_broker gateway"
+          for _ in $(seq 1 60); do
+            pending=""
+            for s in $services; do
+              update=$(docker service inspect "${STACK}_${s}" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}')
+              case "$update" in
+                paused|rollback_*) echo "${STACK}_${s} update $update" >&2
+                  docker service ps --no-trunc "${STACK}_${s}" | head -5
+                  exit 1 ;;
+              esac
+              replicas=$(docker service ls --filter "name=${STACK}_${s}" --format '{{.Replicas}}')
+              if [ "$replicas" != "1/1" ] || { [ -n "$update" ] && [ "$update" != completed ]; }; then
+                pending="$pending ${s}(${replicas:-?} ${update:-new})"
+              fi
+            done
+            if [ -z "$pending" ]; then
+              docker stack services "$STACK" --format '{{.Name}} {{.Replicas}} {{.Image}}'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Not ready after 5 minutes:$pending" >&2
+          for s in $services; do
+            docker service ps --no-trunc --format '{{.Name}} {{.CurrentState}} {{.Error}}' "${STACK}_${s}" | head -3
+          done
+          exit 1
+
+      # A container left on an older image is what kept the IDEP bay fix off dev.
+      - name: Check gateway and broker run this commit
+        run: |
+          for s in gateway java_broker; do
+            image=$(docker service inspect "${STACK}_${s}" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')
+            if [ "${image%%@*}" != "itafm_go-${s}:${ITAFM_GIT_SHA}" ]; then
+              echo "${STACK}_${s} runs $image, expected itafm_go-${s}:${ITAFM_GIT_SHA}" >&2
               exit 1
             fi
           done
@@ -99,10 +184,23 @@ jobs:
         run: |
           for url in http://127.0.0.1:18081/health http://127.0.0.1:18080/health; do
             for _ in $(seq 1 36); do
-              curl -fsS "$url" && echo && continue 2
+              curl -fsS --max-time 5 "$url" && echo && continue 2
               sleep 5
             done
-            echo "$url not healthy after 3 minutes"
-            docker compose logs --tail 100
+            echo "$url not healthy after 3 minutes" >&2
+            docker service logs --no-task-ids --tail 100 "${STACK}_gateway"
+            docker service logs --no-task-ids --tail 100 "${STACK}_java_broker"
             exit 1
+          done
+
+      - name: Remove old image tags
+        run: |
+          # Keep this commit's tag and the 2 newest others for rollback. The
+          # current tag is excluded by name: a rebuild with no change shares the
+          # old image's creation time, and Swarm needs the tag to restart a task.
+          for repo in itafm_go-gateway itafm_go-java_broker; do
+            docker image ls "$repo" --format '{{.CreatedAt}}\t{{.Tag}}' \
+              | awk -F'\t' -v cur="$ITAFM_GIT_SHA" '$2 != cur' \
+              | sort -r | tail -n +3 | cut -f2 \
+              | sed "s|^|$repo:|" | xargs -r docker image rm || true
           done
