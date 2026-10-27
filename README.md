@@ -57,7 +57,9 @@ Surveillance outcomes: `queued` (sent to the DB batch), `duplicate` (unchanged s
 
 ### Surveillance position API
 
-`GET /api/surveillance/position?callsign=<callsign>` (also under the monitor base path, e.g. `/aods-mon/api/surveillance/position`) returns the stored position of one flight from `flight_aircraftlocation`. `callsign` can be the ICAO callsign (`THA661`) or the IATA code (`TG661`).
+`GET https://<EDGE_SERVER_NAME>/aods-monitor/api/surveillance/position?callsign=<callsign>` returns the stored position of one flight from `flight_aircraftlocation`. `callsign` can be the ICAO callsign (`THA661`) or the IATA code (`TG661`).
+
+The edge nginx managed in agos_ops (`nginx/templates/default.conf.template`) forwards `/aods-monitor/` to the gateway monitor on port 18081 and strips the prefix, so the gateway sees `/api/surveillance/position`. That route has no IP allow-list; the API key is the only gate. On the server itself, `http://127.0.0.1:18081/api/surveillance/position` reaches the same handler.
 
 It does not use the monitor login. Clients send an API key in the `X-API-Key` header; keys come from `GATEWAY_SURVEILLANCE_API_KEYS`. With no key configured the API answers `503`.
 
@@ -69,7 +71,7 @@ Where the keys are set:
 Generate a key with `openssl rand -hex 32`.
 
 ```bash
-curl -s -H 'X-API-Key: <key>' 'http://127.0.0.1:18081/api/surveillance/position?callsign=TG661' | jq
+curl -s -H 'X-API-Key: <key>' 'https://<EDGE_SERVER_NAME>/aods-monitor/api/surveillance/position?callsign=TG661' | jq
 ```
 
 ```json
