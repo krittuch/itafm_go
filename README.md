@@ -75,6 +75,7 @@ Key route fields:
 - `GATEWAY_MONITOR_PORT` (default: `18081`)
 - `SURVEILLANCE_DB_BATCH_INTERVAL` (default: `10s`).
 - `SURVEILLANCE_DB_BATCH_MAX_SIZE` (default: `500`).
+- `GATEWAY_FLIGHT_MOVEMENT_ENABLED` (default: `true`): `false` stops consuming the flight movement topic.
 
 ## Quick debug workflow
 
