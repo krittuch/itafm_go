@@ -30,6 +30,8 @@ type gatewayIndexView struct {
 	RoutesJSONURL    string
 	ArchiveURL       string
 	ArchiveSearchURL string
+	SurveillanceURL  string
+	SurveillanceJSON string
 }
 
 var gatewayIndexTemplate = template.Must(template.New("gateway-index").Parse(`<!DOCTYPE html>
@@ -48,7 +50,7 @@ var gatewayIndexTemplate = template.Must(template.New("gateway-index").Parse(`<!
     .hero { background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:18px; }
     h1 { margin:0 0 6px; font-size:1.35rem; }
     .muted { color:var(--muted); }
-    .menu { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:14px; }
+    .menu { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:14px; }
     @media (max-width: 840px) { .menu { grid-template-columns:1fr; } }
     .card { background:rgba(255,253,248,.95); border:1px solid var(--line); border-radius:14px; padding:14px; }
     .card h2 { margin:0 0 6px; font-size:1rem; }
@@ -80,6 +82,14 @@ var gatewayIndexTemplate = template.Must(template.New("gateway-index").Parse(`<!
         <div class="links">
           <a class="btn primary" href="{{.RoutesURL}}">Open Routes Page</a>
           <a class="btn" href="{{.RoutesJSONURL}}">Raw JSON</a>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Surveillance</h2>
+        <div class="muted">Latest track per callsign with filters and skip reasons, held in memory.</div>
+        <div class="links">
+          <a class="btn primary" href="{{.SurveillanceURL}}">Open Surveillance</a>
+          <a class="btn" href="{{.SurveillanceJSON}}">Raw JSON</a>
         </div>
       </div>
       <div class="card">
@@ -160,6 +170,7 @@ func gatewayNavLinks(activeHref string) []gatewayNavLink {
 		{Label: "Main", Href: "./"},
 		{Label: "Health", Href: "./health"},
 		{Label: "Routes", Href: "./routes"},
+		{Label: "Surveillance", Href: "./surveillance"},
 		{Label: "Archive", Href: "./archive"},
 	}
 	for i := range links {
@@ -179,10 +190,11 @@ func (m *gatewayMonitor) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	payload := map[string]string{
-		"service": "gateway-monitor",
-		"routes":  "./routes",
-		"health":  "./health",
-		"archive": "./archive",
+		"service":      "gateway-monitor",
+		"routes":       "./routes",
+		"health":       "./health",
+		"archive":      "./archive",
+		"surveillance": "./surveillance",
 	}
 	if !wantsHTML(r) {
 		writeMonitorJSON(w, payload)
@@ -197,6 +209,8 @@ func (m *gatewayMonitor) handleIndex(w http.ResponseWriter, r *http.Request) {
 		RoutesJSONURL:    "./routes?format=json",
 		ArchiveURL:       "./archive",
 		ArchiveSearchURL: "./archive/search",
+		SurveillanceURL:  "./surveillance",
+		SurveillanceJSON: "./surveillance?format=json",
 	})
 }
 

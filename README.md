@@ -43,13 +43,17 @@ Key route fields:
 - Endpoints:
   - `GET /health`
   - `GET /routes`
+  - `GET /surveillance`: latest track per callsign, held in memory, with filters (`callsign`, `dep`, `dest`, `actype`, `ssr`, `acaddress`, `outcome`, `sort`, `limit`) and per-outcome counters
 
 Example:
 
 ```bash
 curl -s http://127.0.0.1:18081/health | jq
 curl -s http://127.0.0.1:18081/routes | jq
+curl -s -u aodsMon:<password> 'http://127.0.0.1:18081/surveillance?format=json&outcome=not_vtbs' | jq
 ```
+
+Surveillance outcomes: `queued` (sent to the DB batch), `duplicate` (unchanged since the last write), `not_vtbs`, `iata_failed`, `decode_error`, `rejected`.
 
 Key route fields:
 
@@ -76,6 +80,8 @@ Key route fields:
 - `SURVEILLANCE_DB_BATCH_INTERVAL` (default: `10s`).
 - `SURVEILLANCE_DB_BATCH_MAX_SIZE` (default: `500`).
 - `GATEWAY_FLIGHT_MOVEMENT_ENABLED` (default: `true`): `false` stops consuming the flight movement topic.
+- `GATEWAY_SURVEILLANCE_MONITOR_MAX_TRACKS` (default: `2000`): most tracks the surveillance page keeps; the least recently seen is dropped first.
+- `GATEWAY_SURVEILLANCE_MONITOR_TTL` (default: `15m`): a track with no message for this long is dropped.
 
 ## Quick debug workflow
 

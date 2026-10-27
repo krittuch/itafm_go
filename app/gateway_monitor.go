@@ -106,6 +106,8 @@ type gatewayMonitor struct {
 	routes    map[string]*gatewayRouteMonitor
 	archiveDB *sql.DB
 	basePath  string
+
+	surveillanceTracks *surveillanceTrackStore
 }
 
 func newGatewayMonitor(flightTopic, idepTopic, survTopic string, archiveDB *sql.DB) *gatewayMonitor {
@@ -141,6 +143,10 @@ func (m *gatewayMonitor) start() {
 	authUsername := lookupEnvWithDefault("GATEWAY_MONITOR_USERNAME", "aodsMon")
 	authPassword := lookupEnvWithDefault("GATEWAY_MONITOR_PASSWORD", "Aero77Secret")
 	m.basePath = normalizeMonitorBasePath(lookupEnvWithDefault("GATEWAY_MONITOR_BASE_PATH", "/aods-mon"))
+	m.surveillanceTracks = newSurveillanceTrackStore(
+		lookupIntEnvWithDefault("GATEWAY_SURVEILLANCE_MONITOR_MAX_TRACKS", 2000),
+		lookupDurationEnvWithDefault("GATEWAY_SURVEILLANCE_MONITOR_TTL", 15*time.Minute),
+	)
 
 	mux := http.NewServeMux()
 	seenPatterns := map[string]struct{}{}
@@ -159,6 +165,7 @@ func (m *gatewayMonitor) start() {
 	routesHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleRoutes)
 	archivePageHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleArchivePage)
 	archiveSearchHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleArchiveSearch)
+	surveillanceHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleSurveillance)
 	indexHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleIndex)
 	dispatchHandler := func(w http.ResponseWriter, r *http.Request) {
 		switch monitorEndpointSuffix(r) {
@@ -170,6 +177,8 @@ func (m *gatewayMonitor) start() {
 			archivePageHandler(w, r)
 		case "/archive/search":
 			archiveSearchHandler(w, r)
+		case "/surveillance":
+			surveillanceHandler(w, r)
 		default:
 			indexHandler(w, r)
 		}
@@ -186,6 +195,9 @@ func (m *gatewayMonitor) start() {
 
 	register("/archive/search", archiveSearchHandler)
 	register(m.monitorPath("/archive/search"), archiveSearchHandler)
+
+	register("/surveillance", surveillanceHandler)
+	register(m.monitorPath("/surveillance"), surveillanceHandler)
 
 	register("/", dispatchHandler)
 	register(m.monitorPath(""), indexHandler)
@@ -443,6 +455,8 @@ func monitorEndpointSuffix(r *http.Request) string {
 		return "/archive/search"
 	case strings.HasSuffix(path, "/archive"):
 		return "/archive"
+	case strings.HasSuffix(path, "/surveillance"):
+		return "/surveillance"
 	case strings.HasSuffix(path, "/routes"):
 		return "/routes"
 	case strings.HasSuffix(path, "/health"):

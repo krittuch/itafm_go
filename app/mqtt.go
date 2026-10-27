@@ -45,7 +45,7 @@ func StartConsumeKafka(a *App) {
 	monitor.start()
 	archiveStore := newAODSArchiveStore(a.AODSArchiveDB)
 
-	go consumeSurveillanceStream(brokers, *kafkaGroupID, *kafkaSURVTopic, a.DB, monitor.route("surveillance"))
+	go consumeSurveillanceStream(brokers, *kafkaGroupID, *kafkaSURVTopic, a.DB, monitor.route("surveillance"), monitor.surveillanceTracks)
 	go consumeIDEPStream(brokers, *kafkaGroupID, *kafkaIDEPTopic, a.DB, archiveStore, monitor.route("idep"))
 
 	if lookupBoolEnvWithDefault("GATEWAY_FLIGHT_MOVEMENT_ENABLED", true) {
@@ -79,7 +79,14 @@ func loadAirlineReference() {
 	)
 }
 
-func consumeSurveillanceStream(brokers []string, groupID string, topic string, db *sql.DB, monitor *gatewayRouteMonitor) {
+func consumeSurveillanceStream(
+	brokers []string,
+	groupID string,
+	topic string,
+	db *sql.DB,
+	monitor *gatewayRouteMonitor,
+	tracks *surveillanceTrackStore,
+) {
 	survController := controller.NewSurveillanceController(db)
 	batchInterval := getSurveillanceDBBatchInterval()
 	maxBatchSize := getSurveillanceDBBatchMaxSize()
@@ -92,7 +99,9 @@ func consumeSurveillanceStream(brokers []string, groupID string, topic string, d
 
 	runKafkaConsumerLoop(brokers, groupID, topic, monitor, func(value []byte) {
 		monitor.RecordReceived()
-		if onSurveillanceReceive(value, survBatcher) {
+		result := onSurveillanceReceive(value, survBatcher)
+		tracks.record(result)
+		if result.Outcome.written() {
 			monitor.RecordProcessed()
 		} else {
 			monitor.RecordSkipped()
