@@ -68,15 +68,19 @@ func (b *surveillanceBatcher) close() {
 }
 
 func (b *surveillanceBatcher) add(surv *model.AODSSurveillance) bool {
+	return b.queue(surv) != surveillanceOutcomeRejected
+}
+
+func (b *surveillanceBatcher) queue(surv *model.AODSSurveillance) surveillanceOutcome {
 	if surv == nil || surv.CallSign == "" {
-		return false
+		return surveillanceOutcomeRejected
 	}
 
 	shouldFlush := false
 	b.mu.Lock()
 	if b.shouldSkipLocked(surv) {
 		b.mu.Unlock()
-		return true
+		return surveillanceOutcomeDuplicate
 	}
 	b.pending[surv.CallSign] = surv
 	shouldFlush = len(b.pending) >= b.maxBatchSize
@@ -86,7 +90,7 @@ func (b *surveillanceBatcher) add(surv *model.AODSSurveillance) bool {
 		b.flush()
 	}
 
-	return true
+	return surveillanceOutcomeQueued
 }
 
 func (b *surveillanceBatcher) shouldSkipLocked(surv *model.AODSSurveillance) bool {

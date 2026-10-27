@@ -6,32 +6,36 @@ import (
 	"aerothai/itafm/model"
 )
 
-func onSurveillanceReceive(body []byte, batcher *surveillanceBatcher) bool {
+func onSurveillanceReceive(body []byte, batcher *surveillanceBatcher) surveillanceReceiveResult {
 
 	survData := model.AODSSurveillance{}
 	err := json.Unmarshal(body, &survData)
 
 	if err != nil {
-		return false
+		return surveillanceReceiveResult{Outcome: surveillanceOutcomeDecodeError}
 	}
 
+	result := surveillanceReceiveResult{RawCallSign: survData.CallSign, Data: &survData}
+
 	if survData.Departure != "VTBS" && survData.Destination != "VTBS" {
-		return false
+		result.Outcome = surveillanceOutcomeNotVTBS
+		return result
 	}
 
 	success := false
 	survData.CallSign, success = ConvertToIATA(survData.CallSign)
+	result.IATACallSign = survData.CallSign
 
 	if !success {
-		return false
+		result.Outcome = surveillanceOutcomeIATAFailed
+		return result
 	}
 
 	if batcher == nil {
-		return false
+		result.Outcome = surveillanceOutcomeRejected
+		return result
 	}
 
-	if !batcher.add(&survData) {
-		return false
-	}
-	return true
+	result.Outcome = batcher.queue(&survData)
+	return result
 }
