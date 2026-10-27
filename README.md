@@ -55,6 +55,32 @@ curl -s -u aodsMon:<password> 'http://127.0.0.1:18081/surveillance?format=json&o
 
 Surveillance outcomes: `queued` (sent to the DB batch), `duplicate` (unchanged since the last write), `not_vtbs`, `iata_failed`, `decode_error`, `rejected`.
 
+### Surveillance position API
+
+`GET /api/surveillance/position?callsign=<callsign>` (also under the monitor base path, e.g. `/aods-mon/api/surveillance/position`) returns the stored position of one flight from `flight_aircraftlocation`. `callsign` can be the ICAO callsign (`THA661`) or the IATA code (`TG661`).
+
+It does not use the monitor login. Clients send an API key in the `X-API-Key` header; keys come from `GATEWAY_SURVEILLANCE_API_KEYS`. With no key configured the API answers `503`.
+
+```bash
+curl -s -H 'X-API-Key: <key>' 'http://127.0.0.1:18081/api/surveillance/position?callsign=TG661' | jq
+```
+
+```json
+{
+  "callsign": "TG661",
+  "departure": "VTBS",
+  "destination": "RJTT",
+  "latitude": 13.69,
+  "longitude": 100.75,
+  "altitude": 12000,
+  "heading": 45,
+  "position_time": "2026-10-27T10:00:00Z",
+  "last_update": "2026-10-27T10:00:05Z"
+}
+```
+
+`position_time` is the time in the surveillance message; `last_update` is when the gateway last wrote the row (`updated_at`, UTC). Errors are `{"error": "..."}` with `400` (bad callsign), `401` (missing or wrong key), `404` (no row), `500` (DB error) or `503` (API disabled).
+
 Key route fields:
 
 - `received_count`: messages consumed from Kafka
@@ -82,6 +108,7 @@ Key route fields:
 - `GATEWAY_FLIGHT_MOVEMENT_ENABLED` (default: `true`): `false` stops consuming the flight movement topic.
 - `GATEWAY_SURVEILLANCE_MONITOR_MAX_TRACKS` (default: `2000`): most tracks the surveillance page keeps; the least recently seen is dropped first.
 - `GATEWAY_SURVEILLANCE_MONITOR_TTL` (default: `15m`): a track with no message for this long is dropped.
+- `GATEWAY_SURVEILLANCE_API_KEYS` (default: empty, API off): comma-separated keys accepted in `X-API-Key` by the surveillance position API. Give each client its own key.
 
 ## Quick debug workflow
 

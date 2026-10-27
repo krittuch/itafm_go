@@ -42,6 +42,7 @@ func StartConsumeKafka(a *App) {
 	}
 
 	monitor := newGatewayMonitor(*kafkaFlightTopic, *kafkaIDEPTopic, *kafkaSURVTopic, a.AODSArchiveDB)
+	monitor.surveillancePositions = controller.NewSurveillanceController(a.DB)
 	monitor.start()
 	archiveStore := newAODSArchiveStore(a.AODSArchiveDB)
 

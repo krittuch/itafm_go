@@ -1,16 +1,20 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"log"
 
 	"aerothai/itafm/model"
+
+	"github.com/lib/pq"
 )
 
 type SurveillanceRepositoryInterface interface {
 	InsertOrUpdateSurveillance(post *model.AODSSurveillance) bool
 	InsertOrUpdateSurveillanceBatch(posts []*model.AODSSurveillance) bool
 	InsertSurveillance(post *model.AODSSurveillance) bool
+	GetSurveillancePosition(ctx context.Context, callsigns []string) (*model.SurveillancePosition, error)
 }
 
 type SurveillanceRepository struct {
@@ -304,4 +308,41 @@ func (s *SurveillanceRepository) InsertOrUpdateSurveillanceBatch(posts []*model.
 	}
 
 	return true
+}
+
+// GetSurveillancePosition returns the most recently updated row whose callsign
+// is one of callsigns, or nil when there is none.
+func (s *SurveillanceRepository) GetSurveillancePosition(ctx context.Context, callsigns []string) (*model.SurveillancePosition, error) {
+	var (
+		callsign, departure, destination, positionTime sql.NullString
+		lat, lon, altitude, heading                    sql.NullFloat64
+		updatedAt                                      sql.NullTime
+	)
+	err := s.DB.QueryRowContext(ctx, `SELECT callsign, departure, destination, latitude, longitude,
+		altitude, heading, datetime, updated_at
+		FROM flight_aircraftlocation
+		WHERE callsign = ANY($1)
+		ORDER BY updated_at DESC NULLS LAST
+		LIMIT 1`, pq.Array(callsigns)).Scan(
+		&callsign, &departure, &destination, &lat, &lon,
+		&altitude, &heading, &positionTime, &updatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.SurveillancePosition{
+		CallSign:     callsign.String,
+		Departure:    departure.String,
+		Destination:  destination.String,
+		Lat:          lat.Float64,
+		Lon:          lon.Float64,
+		Altitude:     altitude.Float64,
+		Heading:      heading.Float64,
+		PositionTime: positionTime.String,
+		UpdatedAt:    updatedAt.Time,
+	}, nil
 }
