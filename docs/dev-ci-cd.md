@@ -43,7 +43,7 @@ The deploy job never runs for `pull_request` events. PRs from forks therefore ca
 Notes:
 - The gateway and broker stay on the host network, so `localhost:9099`, `localhost:5435`, and the monitors on 18081 and 18080 work as before. agos_ops' backup stack (host port 5435) and its Kuma monitor (port 18081) don't refer to container names, so the new Swarm names don't affect them.
 - The volumes are the ones the compose project `itafm_go` created. The stack declares them `external`, so the data carries over and `docker stack rm` never deletes them.
-- `env_file` reads the same `.envs/.development/*` files. They contain no quoted values, so it doesn't matter that `stack deploy` doesn't strip quotes.
+- `env_file` reads `./.env`, which the deploy job writes from the `development` GitHub environment's secrets just before it deploys. Values are written unquoted, because `stack deploy` doesn't strip quotes. The `.envs/` files are no longer used or tracked.
 - The unused `.:/usr/src/app/` mount from `development.yml` is not in the stack.
 - `development.yml` is left as it is. Don't `up` it on the dev server any more, or the gateway and broker would run twice.
 
@@ -51,22 +51,27 @@ Notes:
 
 1. Check that Swarm is active and both volumes exist.
 2. `docker build` both images, tagged `itafm_go-gateway:<sha>` and `itafm_go-java_broker:<sha>`.
-3. While any container of the compose project `itafm_go` remains, run `docker compose -p itafm_go -f development.yml down --remove-orphans` without `-v`. This only happens on the first deploy, and that is the one outage. On later runs it is skipped, because the stack's own network is also called `itafm_go_default`.
-4. `docker stack deploy --resolve-image never -c stack.development.yml itafm_go`.
-5. Wait up to 5 minutes until every service is `1/1` and its update state is `completed`. It fails at once on `paused` or `rollback_*`.
-6. Fail unless the gateway and broker services use this commit's tag.
-7. Wait up to 3 minutes each for `:18081/health` and `:18080/health`.
-8. Untag older images: keep this commit's tag plus the 2 newest others, by image creation time.
+3. Write `.env` (mode 600) with one line per key in `.env.example`. Each value comes from the `development` environment secret of the same name; an unset secret falls back to the value in `.env.example`. The job fails if a key that is empty there (other than `GATEWAY_*`) has no secret.
+4. While any container of the compose project `itafm_go` remains, run `docker compose -p itafm_go -f development.yml down --remove-orphans` without `-v`. This only happens on the first deploy, and that is the one outage. On later runs it is skipped, because the stack's own network is also called `itafm_go_default`.
+5. `docker stack deploy --resolve-image never -c stack.development.yml itafm_go`.
+6. Wait up to 5 minutes until every service is `1/1` and its update state is `completed`. It fails at once on `paused` or `rollback_*`.
+7. Fail unless the gateway and broker services use this commit's tag.
+8. Wait up to 3 minutes each for `:18081/health` and `:18080/health`.
+9. Untag older images: keep this commit's tag plus the 2 newest others, by image creation time.
+10. Delete `.env`, even when an earlier step failed.
+
+The deploy job runs in the `development` GitHub environment, which only the `dev` branch may deploy to.
 
 ## One-time setup on the dev server
 
 1. Register a self-hosted runner for `krittuch/itafm_go`: GitHub, then Settings > Actions > Runners > New self-hosted runner (Linux). Runners belong to a single repo on a personal account, so AGOS_DJ's runner can't be reused. The default labels `self-hosted` and `Linux` are enough.
 2. Run it as a user that can use Docker and has Compose v2. Install it as a service: `sudo ./svc.sh install && sudo ./svc.sh start`.
 3. Make the `test` check required for `dev`.
+4. Add one secret per `.env.example` key to the `development` environment. From a filled-in dotenv file: `gh secret set -f <file> --env development --repo krittuch/itafm_go`.
 
 ## Rollback
 
-`docker stack rm itafm_go` keeps the volumes. Then `docker compose -p itafm_go -f development.yml up -d --build` brings back the compose stack.
+`docker stack rm itafm_go` keeps the volumes. Then `docker compose -p itafm_go -f development.yml up -d --build` brings back the compose stack. It needs a filled-in `.env` in the checkout first.
 
 ## Conflicts with agos_ops
 

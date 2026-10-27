@@ -99,6 +99,9 @@ jobs:
     # Fork PRs never reach this job, so outside code never runs on the dev server.
     runs-on: [self-hosted, Linux]
     timeout-minutes: 30
+    # The development environment only allows the dev branch and holds the
+    # gateway's secrets.
+    environment: development
     concurrency:
       group: deploy-dev
       cancel-in-progress: false
@@ -125,6 +128,63 @@ jobs:
             docker build -f Dockerfile.dev -t "itafm_go-gateway:${ITAFM_GIT_SHA}" .
           timeout --signal=TERM --kill-after=30s 15m \
             docker build -f java-broker/Dockerfile -t "itafm_go-java_broker:${ITAFM_GIT_SHA}" .
+
+      # .env.example lists the keys; each comes from the development environment
+      # secret of the same name. An unset secret falls back to the value in
+      # .env.example. Keys with no value there, other than GATEWAY_*, are
+      # required.
+      - name: Write .env from the development environment
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          ACTIVEMQ_BROKER_URL: ${{ secrets.ACTIVEMQ_BROKER_URL }}
+          MQTT_IP_ADDRESS: ${{ secrets.MQTT_IP_ADDRESS }}
+          MQTT_PORT: ${{ secrets.MQTT_PORT }}
+          MQTT_USER: ${{ secrets.MQTT_USER }}
+          MQTT_PASSWORD: ${{ secrets.MQTT_PASSWORD }}
+          MQTT_FLIGHT_MOVEMENT_QUEUE: ${{ secrets.MQTT_FLIGHT_MOVEMENT_QUEUE }}
+          MQTT_IDEP_QUEUE: ${{ secrets.MQTT_IDEP_QUEUE }}
+          MQTT_SURV_TOPIC: ${{ secrets.MQTT_SURV_TOPIC }}
+          KAFKA_BROKERS: ${{ secrets.KAFKA_BROKERS }}
+          KAFKA_GROUP_ID: ${{ secrets.KAFKA_GROUP_ID }}
+          KAFKA_CLIENT_ID: ${{ secrets.KAFKA_CLIENT_ID }}
+          KAFKA_FLIGHT_TOPIC: ${{ secrets.KAFKA_FLIGHT_TOPIC }}
+          KAFKA_IDEP_TOPIC: ${{ secrets.KAFKA_IDEP_TOPIC }}
+          KAFKA_SURV_TOPIC: ${{ secrets.KAFKA_SURV_TOPIC }}
+          SURVEILLANCE_DB_BATCH_INTERVAL: ${{ secrets.SURVEILLANCE_DB_BATCH_INTERVAL }}
+          SURVEILLANCE_DB_BATCH_MAX_SIZE: ${{ secrets.SURVEILLANCE_DB_BATCH_MAX_SIZE }}
+          GATEWAY_SURVEILLANCE_API_KEYS: ${{ secrets.GATEWAY_SURVEILLANCE_API_KEYS }}
+          GATEWAY_MONITOR_USERNAME: ${{ secrets.GATEWAY_MONITOR_USERNAME }}
+          GATEWAY_MONITOR_PASSWORD: ${{ secrets.GATEWAY_MONITOR_PASSWORD }}
+        run: |
+          umask 077
+          : > .env
+          missing=""
+          while IFS=$'\t' read -r key default; do
+            value="${!key-}"
+            if [ -z "$value" ]; then
+              value="$default"
+            fi
+            if [ -z "$value" ]; then
+              case "$key" in
+                GATEWAY_*) ;;
+                *) missing="$missing $key" ;;
+              esac
+              continue
+            fi
+            if [[ "$value" == *$'\n'* ]]; then
+              echo "::error::secret $key contains a newline" >&2
+              exit 1
+            fi
+            printf '%s=%s\n' "$key" "$value" >> .env
+          done < <(awk '/^[A-Z][A-Z0-9_]*=/ { i = index($0, "="); print substr($0, 1, i - 1) "\t" substr($0, i + 1) }' .env.example)
+          if [ -n "$missing" ]; then
+            echo "::error::Missing development environment secrets:$missing" >&2
+            exit 1
+          fi
 
       - name: Remove compose containers (first Swarm deploy only)
         run: |
@@ -204,3 +264,7 @@ jobs:
               | sort -r | tail -n +3 | cut -f2 \
               | sed "s|^|$repo:|" | xargs -r docker image rm || true
           done
+
+      - name: Remove .env
+        if: always()
+        run: rm -f .env

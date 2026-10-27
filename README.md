@@ -61,6 +61,13 @@ Surveillance outcomes: `queued` (sent to the DB batch), `duplicate` (unchanged s
 
 It does not use the monitor login. Clients send an API key in the `X-API-Key` header; keys come from `GATEWAY_SURVEILLANCE_API_KEYS`. With no key configured the API answers `503`.
 
+Where the keys are set:
+
+- Dev: the `GATEWAY_SURVEILLANCE_API_KEYS` secret of the `development` GitHub environment. The deploy job writes it into `.env`; a new or changed key takes effect on the next deploy.
+- Production: `GATEWAY_SURVEILLANCE_API_KEYS=<key1>,<key2>` in the server's `.env`. `docker compose -f production.yml up -d gateway` recreates the gateway when the value changed.
+
+Generate a key with `openssl rand -hex 32`.
+
 ```bash
 curl -s -H 'X-API-Key: <key>' 'http://127.0.0.1:18081/api/surveillance/position?callsign=TG661' | jq
 ```
@@ -89,6 +96,13 @@ Key route fields:
 - `decode_error_count`: payload/command decoding errors
 - `consumer_error_count`: Kafka consumer loop errors
 - `last_error`: most recent consumer/decode error
+
+## Settings
+
+The gateway and java broker read their settings from an untracked `.env` in the repo root. [`.env.example`](.env.example) lists every key.
+
+- Production and local: copy `.env.example` to `.env` and fill it in. `docker compose` fails without it.
+- Dev server: the deploy job writes `.env` from the secrets of the `development` GitHub environment (see [docs/dev-ci-cd.md](docs/dev-ci-cd.md)).
 
 ## Monitor configuration
 

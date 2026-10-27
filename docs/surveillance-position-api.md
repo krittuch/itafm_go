@@ -20,12 +20,16 @@ On 2026-10-27 the user asked for an API that returns one flight's current locati
   - No key configured means `503`. A missing or wrong key means `401`.
   - Start-up logs the number of keys, never the keys themselves.
 - `app/gateway_monitor.go`, `app/mqtt.go`: route registration, and the monitor gets a reader over the main DB.
-- `README.md`: endpoint, response, errors and the env var.
+- `README.md`: endpoint, response, errors, the env var and where each environment's keys are set.
 
 ## Constraints and open points
 
 - The API runs on the monitor HTTP server, so `GATEWAY_MONITOR_ENABLED=false` turns it off too.
-- No key is configured anywhere yet. The compose `env_file`s under `.envs/` are tracked in git, so putting a key there would commit it. How keys reach dev and production is still to be decided.
+- Keys are kept out of git. Like every other setting, they come from the untracked `.env` (see `docs/dotenv-and-github-environment.md`):
+  - Dev: the `GATEWAY_SURVEILLANCE_API_KEYS` secret of the `development` GitHub environment, which the deploy job writes into `.env`.
+  - Production: the server's `.env`.
+  - With no key set, the API answers `503`. The deploy does not fail.
+- Env values are visible to anyone on the server who can run `docker inspect` / `docker service inspect`.
 - `flight_aircraftlocation` keeps one row per callsign and never deletes it. A flight number seen yesterday still returns yesterday's position. Clients should check `last_update`.
 - The table's real column types are not in this repo. If `updated_at` is `timestamp` without a time zone, the value is in the DB session's zone (Asia/Bangkok on the servers), but `last_update` would label it UTC. With `timestamptz`, which is the Django default, it is correct.
 - The project has no OpenAPI/Swagger setup, so the endpoint is documented in the README only.

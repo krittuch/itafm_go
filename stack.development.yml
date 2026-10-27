@@ -54,8 +54,7 @@ services:
   java_broker:
     image: itafm_go-java_broker:${ITAFM_GIT_SHA:?set ITAFM_GIT_SHA}
     env_file:
-      - ./.envs/.development/.mqtt
-      - ./.envs/.development/.kafka
+      - ./.env
     networks:
       - hostnet
     deploy: *deploy
@@ -63,9 +62,7 @@ services:
   gateway:
     image: itafm_go-gateway:${ITAFM_GIT_SHA:?set ITAFM_GIT_SHA}
     env_file:
-      - ./.envs/.development/.postgres
-      - ./.envs/.development/.mqtt
-      - ./.envs/.development/.kafka
+      - ./.env
     environment:
       AODS_ARCHIVE_DB_HOST: localhost
       AODS_ARCHIVE_DB_PORT: "5435"
