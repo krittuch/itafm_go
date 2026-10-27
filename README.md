@@ -55,6 +55,41 @@ curl -s -u aodsMon:<password> 'http://127.0.0.1:18081/surveillance?format=json&o
 
 Surveillance outcomes: `queued` (sent to the DB batch), `duplicate` (unchanged since the last write), `not_vtbs`, `iata_failed`, `decode_error`, `rejected`.
 
+### Surveillance position API
+
+`GET https://<EDGE_SERVER_NAME>/aods-monitor/api/surveillance/position?callsign=<callsign>` returns the stored position of one flight from `flight_aircraftlocation`. `callsign` can be the ICAO callsign (`THA661`) or the IATA code (`TG661`).
+
+The edge nginx managed in agos_ops (`nginx/templates/default.conf.template`) forwards `/aods-monitor/` to the gateway monitor on port 18081 and strips the prefix, so the gateway sees `/api/surveillance/position`. That route has no IP allow-list; the API key is the only gate. On the server itself, `http://127.0.0.1:18081/api/surveillance/position` reaches the same handler.
+
+It does not use the monitor login. Clients send an API key in the `X-API-Key` header; keys come from `GATEWAY_SURVEILLANCE_API_KEYS`. With no key configured the API answers `503`.
+
+Where the keys are set:
+
+- Dev: the `GATEWAY_SURVEILLANCE_API_KEYS` secret of the `development` GitHub environment. The deploy job writes it into `.env`; a new or changed key takes effect on the next deploy.
+- Production: `GATEWAY_SURVEILLANCE_API_KEYS=<key1>,<key2>` in the server's `.env`. `docker compose -f production.yml up -d gateway` recreates the gateway when the value changed.
+
+Generate a key with `openssl rand -hex 32`.
+
+```bash
+curl -s -H 'X-API-Key: <key>' 'https://<EDGE_SERVER_NAME>/aods-monitor/api/surveillance/position?callsign=TG661' | jq
+```
+
+```json
+{
+  "callsign": "TG661",
+  "departure": "VTBS",
+  "destination": "RJTT",
+  "latitude": 13.69,
+  "longitude": 100.75,
+  "altitude": 12000,
+  "heading": 45,
+  "position_time": "2026-10-27T10:00:00Z",
+  "last_update": "2026-10-27T10:00:05Z"
+}
+```
+
+`position_time` is the time in the surveillance message; `last_update` is when the gateway last wrote the row (`updated_at`, UTC). Errors are `{"error": "..."}` with `400` (bad callsign), `401` (missing or wrong key), `404` (no row), `500` (DB error) or `503` (API disabled).
+
 Key route fields:
 
 - `received_count`: messages consumed from Kafka
@@ -63,6 +98,13 @@ Key route fields:
 - `decode_error_count`: payload/command decoding errors
 - `consumer_error_count`: Kafka consumer loop errors
 - `last_error`: most recent consumer/decode error
+
+## Settings
+
+The gateway and java broker read their settings from an untracked `.env` in the repo root. [`.env.example`](.env.example) lists every key.
+
+- Production and local: copy `.env.example` to `.env` and fill it in. `docker compose` fails without it.
+- Dev server: the deploy job writes `.env` from the secrets and variables of the `development` GitHub environment, as grouped in `.env.example` (see [docs/dev-ci-cd.md](docs/dev-ci-cd.md)).
 
 ## Monitor configuration
 
@@ -82,6 +124,7 @@ Key route fields:
 - `GATEWAY_FLIGHT_MOVEMENT_ENABLED` (default: `true`): `false` stops consuming the flight movement topic.
 - `GATEWAY_SURVEILLANCE_MONITOR_MAX_TRACKS` (default: `2000`): most tracks the surveillance page keeps; the least recently seen is dropped first.
 - `GATEWAY_SURVEILLANCE_MONITOR_TTL` (default: `15m`): a track with no message for this long is dropped.
+- `GATEWAY_SURVEILLANCE_API_KEYS` (default: empty, API off): comma-separated keys accepted in `X-API-Key` by the surveillance position API. Give each client its own key.
 
 ## Quick debug workflow
 

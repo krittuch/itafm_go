@@ -40,8 +40,7 @@ services:
       dockerfile: java-broker/Dockerfile
     restart: always
     env_file:
-      - ./.envs/.production/.mqtt
-      - ./.envs/.production/.kafka
+      - ./.env
     depends_on:
       - itafm_kafka
     network_mode: host
@@ -53,9 +52,7 @@ services:
       dockerfile: Dockerfile.prod
     restart: always
     env_file:
-      - ./.envs/.production/.postgres
-      - ./.envs/.production/.mqtt
-      - ./.envs/.production/.kafka
+      - ./.env
     environment:
       GATEWAY_FLIGHT_MOVEMENT_ENABLED: "false"
     depends_on:

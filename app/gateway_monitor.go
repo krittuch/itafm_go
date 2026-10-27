@@ -107,7 +107,8 @@ type gatewayMonitor struct {
 	archiveDB *sql.DB
 	basePath  string
 
-	surveillanceTracks *surveillanceTrackStore
+	surveillanceTracks    *surveillanceTrackStore
+	surveillancePositions surveillancePositionReader
 }
 
 func newGatewayMonitor(flightTopic, idepTopic, survTopic string, archiveDB *sql.DB) *gatewayMonitor {
@@ -167,6 +168,8 @@ func (m *gatewayMonitor) start() {
 	archiveSearchHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleArchiveSearch)
 	surveillanceHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleSurveillance)
 	indexHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleIndex)
+	surveillanceAPIKeys := surveillanceAPIKeysFromEnv()
+	surveillanceAPIHandler := withSurveillanceAPIKey(surveillanceAPIKeys, handleSurveillancePosition(m.surveillancePositions))
 	dispatchHandler := func(w http.ResponseWriter, r *http.Request) {
 		switch monitorEndpointSuffix(r) {
 		case "/health":
@@ -199,6 +202,9 @@ func (m *gatewayMonitor) start() {
 	register("/surveillance", surveillanceHandler)
 	register(m.monitorPath("/surveillance"), surveillanceHandler)
 
+	register("/api/surveillance/position", surveillanceAPIHandler)
+	register(m.monitorPath("/api/surveillance/position"), surveillanceAPIHandler)
+
 	register("/", dispatchHandler)
 	register(m.monitorPath(""), indexHandler)
 	register(m.monitorPath("/"), indexHandler)
@@ -221,6 +227,8 @@ func (m *gatewayMonitor) start() {
 			log.Printf("Gateway monitor stopped: %v", err)
 		}
 	}()
+
+	log.Printf("surveillance position API keys configured: %d", len(surveillanceAPIKeys))
 
 	m.startHourlySummaryLogger()
 }

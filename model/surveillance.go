@@ -1,6 +1,9 @@
 package model
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Surveillance struct {
 	Id              uint    `json:"id"`
@@ -87,4 +90,16 @@ func (a *AODSSurveillance) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+type SurveillancePosition struct {
+	CallSign     string
+	Departure    string
+	Destination  string
+	Lat          float64
+	Lon          float64
+	Altitude     float64
+	Heading      float64
+	PositionTime string
+	UpdatedAt    time.Time
 }

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"database/sql"
 
 	"aerothai/itafm/model"
@@ -10,6 +11,7 @@ import (
 type SurveillanceInterface interface {
 	InsertOrUpdateSurveillance(*model.AODSSurveillance) bool
 	InsertOrUpdateSurveillanceBatch([]*model.AODSSurveillance) bool
+	GetSurveillancePosition(context.Context, []string) (*model.SurveillancePosition, error)
 }
 
 type SurveillanceController struct {
@@ -30,4 +32,9 @@ func (s *SurveillanceController) InsertOrUpdateSurveillance(surveillance *model.
 func (s *SurveillanceController) InsertOrUpdateSurveillanceBatch(surveillance []*model.AODSSurveillance) bool {
 	repo := repository.NewSurveillanceRepository(s.DB)
 	return repo.InsertOrUpdateSurveillanceBatch(surveillance)
+}
+
+func (s *SurveillanceController) GetSurveillancePosition(ctx context.Context, callsigns []string) (*model.SurveillancePosition, error) {
+	repo := repository.NewSurveillanceRepository(s.DB)
+	return repo.GetSurveillancePosition(ctx, callsigns)
 }

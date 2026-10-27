@@ -42,8 +42,7 @@ services:
       dockerfile: java-broker/Dockerfile
     restart: always
     env_file:
-      - ./.envs/.local/.mqtt
-      - ./.envs/.local/.kafka
+      - ./.env
     depends_on:
       - kafka
     network_mode: host
@@ -55,9 +54,7 @@ services:
       dockerfile: Dockerfile.local
     restart: always
     env_file:
-      - ./.envs/.local/.postgres
-      - ./.envs/.local/.mqtt
-      - ./.envs/.local/.kafka
+      - ./.env
     environment:
       AODS_ARCHIVE_DB_HOST: localhost
       AODS_ARCHIVE_DB_PORT: "5434"
