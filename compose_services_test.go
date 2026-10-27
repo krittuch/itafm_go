@@ -82,6 +82,15 @@ func TestGatewayServiceUsesKafkaEnvFile(t *testing.T) {
 	}
 }
 
+func TestProductionGatewayRunsSurveillanceAndIDEPOnly(t *testing.T) {
+	gatewayService := serviceBlock(t, readFile(t, "production.yml"), "gateway")
+
+	mustContain(t, gatewayService, `GATEWAY_FLIGHT_MOVEMENT_ENABLED: "false"`)
+	if strings.Contains(gatewayService, "AODS_ARCHIVE_DB_") {
+		t.Fatal("production gateway must not configure the AODS archive DB")
+	}
+}
+
 func readFile(t *testing.T, path string) string {
 	t.Helper()
 

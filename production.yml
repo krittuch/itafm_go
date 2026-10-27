@@ -57,13 +57,8 @@ services:
       - ./.envs/.production/.mqtt
       - ./.envs/.production/.kafka
     environment:
-      AODS_ARCHIVE_DB_HOST: localhost
-      AODS_ARCHIVE_DB_PORT: "5436"
-      AODS_ARCHIVE_DB_NAME: aods_archive
-      AODS_ARCHIVE_DB_USER: aods_archive
-      AODS_ARCHIVE_DB_PASSWORD: aods_archive
+      GATEWAY_FLIGHT_MOVEMENT_ENABLED: "false"
     depends_on:
-      - aods_archive_db
       - itafm_kafka
       - java_broker
     volumes:
