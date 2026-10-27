@@ -47,7 +47,12 @@ func StartConsumeKafka(a *App) {
 
 	go consumeSurveillanceStream(brokers, *kafkaGroupID, *kafkaSURVTopic, a.DB, monitor.route("surveillance"))
 	go consumeIDEPStream(brokers, *kafkaGroupID, *kafkaIDEPTopic, a.DB, archiveStore, monitor.route("idep"))
-	go consumeFlightStream(brokers, *kafkaGroupID, *kafkaFlightTopic, a.DB, archiveStore, monitor.route("flight"))
+
+	if lookupBoolEnvWithDefault("GATEWAY_FLIGHT_MOVEMENT_ENABLED", true) {
+		go consumeFlightStream(brokers, *kafkaGroupID, *kafkaFlightTopic, a.DB, archiveStore, monitor.route("flight"))
+	} else {
+		log.Println("flight movement consumer disabled (GATEWAY_FLIGHT_MOVEMENT_ENABLED=false)")
+	}
 
 	select {}
 }

@@ -45,10 +45,11 @@ func onIDEPReceive(
 	patchFlight.FlightNumber = fmt.Sprint(iata, " ", flightNumber)
 
 	updated := false
-	if bay, eobt, ok := idepBayUpdate(data); ok {
-		flightController.UpdateBay(patchFlight.FlightNumber, eobt, bay)
-		updated = true
-	}
+	// IDEP updates TOBT only; bay writes are disabled.
+	// if bay, eobt, ok := idepBayUpdate(data); ok {
+	// 	flightController.UpdateBay(patchFlight.FlightNumber, eobt, bay)
+	// 	updated = true
+	// }
 
 	if !strings.Contains(data.TOBT, "0001-01-01") {
 		flightController.UpdateTOBT(patchFlight.FlightNumber, data.TOBT)
