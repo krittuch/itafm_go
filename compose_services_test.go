@@ -73,17 +73,40 @@ func TestDevDeployWritesDotEnvFromEnvironmentSecrets(t *testing.T) {
 	workflow := readFile(t, ".github/workflows/dev.yml")
 	mustContain(t, workflow, "environment: development")
 
-	keys := 0
+	// Variable values show in the public Actions logs, so anything that looks
+	// like a host, login or key must be a secret.
+	sensitive := []string{"HOST", "USER", "PASSWORD", "KEYS", "URL", "IP_ADDRESS"}
+
+	source := ""
+	keys := map[string]int{}
 	for _, line := range strings.Split(readFile(t, ".env.example"), "\n") {
+		switch {
+		case strings.HasPrefix(line, "# === Secrets"):
+			source = "secrets"
+			continue
+		case strings.HasPrefix(line, "# === Variables"):
+			source = "vars"
+			continue
+		}
 		key, _, ok := strings.Cut(line, "=")
 		if !ok || strings.HasPrefix(key, "#") {
 			continue
 		}
-		keys++
-		mustContain(t, workflow, key+": ${{ secrets."+key+" }}")
+		if source == "" {
+			t.Fatalf("%s is outside the Secrets and Variables blocks of .env.example", key)
+		}
+		keys[source]++
+		mustContain(t, workflow, key+": ${{ "+source+"."+key+" }}")
+		if source == "vars" {
+			for _, part := range sensitive {
+				if strings.Contains(key, part) {
+					t.Fatalf("%s looks sensitive and must be in the Secrets block", key)
+				}
+			}
+		}
 	}
-	if keys == 0 {
-		t.Fatal(".env.example lists no keys")
+	if keys["secrets"] == 0 || keys["vars"] == 0 {
+		t.Fatalf(".env.example must list both secrets and variables, got %v", keys)
 	}
 
 	for ignoreFile, entries := range map[string][]string{

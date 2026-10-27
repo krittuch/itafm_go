@@ -102,7 +102,7 @@ Key route fields:
 The gateway and java broker read their settings from an untracked `.env` in the repo root. [`.env.example`](.env.example) lists every key.
 
 - Production and local: copy `.env.example` to `.env` and fill it in. `docker compose` fails without it.
-- Dev server: the deploy job writes `.env` from the secrets of the `development` GitHub environment (see [docs/dev-ci-cd.md](docs/dev-ci-cd.md)).
+- Dev server: the deploy job writes `.env` from the secrets and variables of the `development` GitHub environment, as grouped in `.env.example` (see [docs/dev-ci-cd.md](docs/dev-ci-cd.md)).
 
 ## Monitor configuration
 

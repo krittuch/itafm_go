@@ -130,35 +130,35 @@ jobs:
             docker build -f java-broker/Dockerfile -t "itafm_go-java_broker:${ITAFM_GIT_SHA}" .
 
       # .env.example lists the keys; each comes from the development environment
-      # secret of the same name. An unset secret falls back to the value in
-      # .env.example. Keys with no value there, other than GATEWAY_*, are
-      # required.
+      # secret or variable of the same name, as grouped there. An unset key
+      # falls back to the value in .env.example. Keys with no value there,
+      # other than GATEWAY_*, are required.
       - name: Write .env from the development environment
         env:
           DB_HOST: ${{ secrets.DB_HOST }}
-          DB_PORT: ${{ secrets.DB_PORT }}
-          DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           ACTIVEMQ_BROKER_URL: ${{ secrets.ACTIVEMQ_BROKER_URL }}
           MQTT_IP_ADDRESS: ${{ secrets.MQTT_IP_ADDRESS }}
-          MQTT_PORT: ${{ secrets.MQTT_PORT }}
           MQTT_USER: ${{ secrets.MQTT_USER }}
           MQTT_PASSWORD: ${{ secrets.MQTT_PASSWORD }}
-          MQTT_FLIGHT_MOVEMENT_QUEUE: ${{ secrets.MQTT_FLIGHT_MOVEMENT_QUEUE }}
-          MQTT_IDEP_QUEUE: ${{ secrets.MQTT_IDEP_QUEUE }}
-          MQTT_SURV_TOPIC: ${{ secrets.MQTT_SURV_TOPIC }}
-          KAFKA_BROKERS: ${{ secrets.KAFKA_BROKERS }}
-          KAFKA_GROUP_ID: ${{ secrets.KAFKA_GROUP_ID }}
-          KAFKA_CLIENT_ID: ${{ secrets.KAFKA_CLIENT_ID }}
-          KAFKA_FLIGHT_TOPIC: ${{ secrets.KAFKA_FLIGHT_TOPIC }}
-          KAFKA_IDEP_TOPIC: ${{ secrets.KAFKA_IDEP_TOPIC }}
-          KAFKA_SURV_TOPIC: ${{ secrets.KAFKA_SURV_TOPIC }}
-          SURVEILLANCE_DB_BATCH_INTERVAL: ${{ secrets.SURVEILLANCE_DB_BATCH_INTERVAL }}
-          SURVEILLANCE_DB_BATCH_MAX_SIZE: ${{ secrets.SURVEILLANCE_DB_BATCH_MAX_SIZE }}
           GATEWAY_SURVEILLANCE_API_KEYS: ${{ secrets.GATEWAY_SURVEILLANCE_API_KEYS }}
           GATEWAY_MONITOR_USERNAME: ${{ secrets.GATEWAY_MONITOR_USERNAME }}
           GATEWAY_MONITOR_PASSWORD: ${{ secrets.GATEWAY_MONITOR_PASSWORD }}
+          DB_PORT: ${{ vars.DB_PORT }}
+          DB_NAME: ${{ vars.DB_NAME }}
+          MQTT_PORT: ${{ vars.MQTT_PORT }}
+          MQTT_FLIGHT_MOVEMENT_QUEUE: ${{ vars.MQTT_FLIGHT_MOVEMENT_QUEUE }}
+          MQTT_IDEP_QUEUE: ${{ vars.MQTT_IDEP_QUEUE }}
+          MQTT_SURV_TOPIC: ${{ vars.MQTT_SURV_TOPIC }}
+          KAFKA_BROKERS: ${{ vars.KAFKA_BROKERS }}
+          KAFKA_GROUP_ID: ${{ vars.KAFKA_GROUP_ID }}
+          KAFKA_CLIENT_ID: ${{ vars.KAFKA_CLIENT_ID }}
+          KAFKA_FLIGHT_TOPIC: ${{ vars.KAFKA_FLIGHT_TOPIC }}
+          KAFKA_IDEP_TOPIC: ${{ vars.KAFKA_IDEP_TOPIC }}
+          KAFKA_SURV_TOPIC: ${{ vars.KAFKA_SURV_TOPIC }}
+          SURVEILLANCE_DB_BATCH_INTERVAL: ${{ vars.SURVEILLANCE_DB_BATCH_INTERVAL }}
+          SURVEILLANCE_DB_BATCH_MAX_SIZE: ${{ vars.SURVEILLANCE_DB_BATCH_MAX_SIZE }}
         run: |
           umask 077
           : > .env
@@ -176,13 +176,13 @@ jobs:
               continue
             fi
             if [[ "$value" == *$'\n'* ]]; then
-              echo "::error::secret $key contains a newline" >&2
+              echo "::error::$key contains a newline" >&2
               exit 1
             fi
             printf '%s=%s\n' "$key" "$value" >> .env
           done < <(awk '/^[A-Z][A-Z0-9_]*=/ { i = index($0, "="); print substr($0, 1, i - 1) "\t" substr($0, i + 1) }' .env.example)
           if [ -n "$missing" ]; then
-            echo "::error::Missing development environment secrets:$missing" >&2
+            echo "::error::Missing development environment secrets or variables:$missing" >&2
             exit 1
           fi
 

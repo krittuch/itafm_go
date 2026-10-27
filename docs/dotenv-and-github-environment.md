@@ -15,20 +15,24 @@ On 2026-10-27, while wiring the surveillance position API key, the user asked fo
 
 ## What changed
 
-- `.env.example` (new, tracked) lists every key the gateway and java broker read, with non-secret defaults. These keys were left out because no code reads them: `ITAFM_MQTT_*`, `ITAFM_SURV_TOPIC`, `ITAFM_FLTH_TOPIC` (only declared in `app/config.go`), `MQTT_FLIGHT_MOVEMENT_TOPIC`, `MQTT_IDEP_TOPIC`, `DISABLE_ITAFM_MQTT`, `DB_DATABASE`, `POSTGRES_PASSWORD`.
+- `.env.example` (new, tracked) lists every key the gateway and java broker read, with non-secret defaults. Keys are in two blocks:
+  - **Secrets:** `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `ACTIVEMQ_BROKER_URL`, `MQTT_IP_ADDRESS`, `MQTT_USER`, `MQTT_PASSWORD`, `GATEWAY_SURVEILLANCE_API_KEYS`, `GATEWAY_MONITOR_USERNAME`, `GATEWAY_MONITOR_PASSWORD`. Hosts, users, passwords and keys are secrets, because this repo's Actions logs are public and a step's `env:` shows variable values unmasked.
+  - **Variables:** ports, DB name, queue and topic names, Kafka settings, and batch tuning.
+  - Left out, because no code reads them: `ITAFM_MQTT_*`, `ITAFM_SURV_TOPIC`, `ITAFM_FLTH_TOPIC` (only declared in `app/config.go`), `MQTT_FLIGHT_MOVEMENT_TOPIC`, `MQTT_IDEP_TOPIC`, `DISABLE_ITAFM_MQTT`, `DB_DATABASE`, `POSTGRES_PASSWORD`.
 - `production.yml`, `development.yml`, `local.yml`, `stack.development.yml`: `gateway` and `java_broker` use `env_file: ./.env` in place of the `.envs/` files. Inline `environment:` values (flight movement off in production, the dev archive DB) still override it. Compose fails when `.env` is missing.
 - `.github/workflows/dev.yml`, deploy job:
   - It runs in the `development` environment, which allows only the `dev` branch.
-  - A new step writes `.env` (umask 077) with one line per `.env.example` key, from the environment secret of the same name. An unset secret falls back to the value in `.env.example`.
-  - The step fails if a key that is empty in `.env.example` (other than `GATEWAY_*`) has no secret. It also fails on a value containing a newline.
+  - A new step writes `.env` (umask 077) with one line per `.env.example` key. Secrets-block keys come from `secrets.<KEY>` and Variables-block keys from `vars.<KEY>`. An unset key falls back to the value in `.env.example`.
+  - The step fails if a key that is empty in `.env.example` (other than `GATEWAY_*`) is unset. It also fails on a value containing a newline.
   - A last `if: always()` step deletes `.env`.
 - `git rm --cached` on `.env` and `.envs/`. `.gitignore` now ignores `.env` and `.envs/` (in place of the 9 single-file entries), and `.dockerignore` ignores both.
 - `compose_services_test.go`:
   - every compose/stack file reads `./.env` for both services and never `.envs`
   - `.env.example` keeps `KAFKA_BROKERS=localhost:9099`
-  - the deploy job uses the environment and maps a secret for every `.env.example` key
+  - the deploy job uses the environment, and maps each `.env.example` key from `secrets` or `vars` according to its block
+  - no key that looks like a host, user, password, key or URL sits in the Variables block
   - both ignore files cover `.env` and `.envs`
-- `README.md`, `docs/dev-ci-cd.md`: the new source of settings, the deploy step, and the one-time `gh secret set -f` setup.
+- `README.md`, `docs/dev-ci-cd.md`: the new source of settings, the deploy step, and the one-time `gh secret set -f` / `gh variable set -f` setup.
 
 ## Things to know
 
@@ -46,4 +50,4 @@ On 2026-10-27, while wiring the surveillance position API key, the user asked fo
   - With every required key set, it wrote them unquoted, including a value with `=` and `$`. Kafka and batch keys fell back to `.env.example`, the file was mode 600, and it exited 0.
   - With required keys missing, it listed them and exited 1.
 - `docker compose -f <file> config` rendered `production.yml`, `development.yml`, `local.yml` and `stack.development.yml` with a `.env` present. `production.yml` failed without one.
-- Not tested: a real dev deploy through the `development` environment (its secrets are not set yet), or a production `up` with the new `.env`.
+- Not tested: a real dev deploy through the `development` environment (its secrets and variables are not set yet), or a production `up` with the new `.env`.
