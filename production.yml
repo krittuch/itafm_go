@@ -55,7 +55,14 @@ services:
       - ./.env
     environment:
       GATEWAY_FLIGHT_MOVEMENT_ENABLED: "false"
+      GATEWAY_AODS_MESSAGE_ARCHIVE_ENABLED: "false"
+      AODS_ARCHIVE_DB_HOST: localhost
+      AODS_ARCHIVE_DB_PORT: "5436"
+      AODS_ARCHIVE_DB_NAME: aods_archive
+      AODS_ARCHIVE_DB_USER: aods_archive
+      AODS_ARCHIVE_DB_PASSWORD: aods_archive
     depends_on:
+      - aods_archive_db
       - itafm_kafka
       - java_broker
     volumes:

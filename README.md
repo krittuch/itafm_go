@@ -88,7 +88,15 @@ curl -s -H 'X-API-Key: <key>' 'https://<EDGE_SERVER_NAME>/aods-monitor/api/surve
 }
 ```
 
-`position_time` is the time in the surveillance message; `last_update` is when the gateway last wrote the row (`updated_at`, UTC). Errors are `{"error": "..."}` with `400` (bad callsign), `401` (missing or wrong key), `404` (no row), `500` (DB error) or `503` (API disabled).
+`position_time` is the time in the surveillance message; `last_update` is when the gateway last wrote the row (`updated_at`, UTC).
+
+Add `at=<RFC 3339 time>` to get the position at a past time within the last 30 minutes (`GATEWAY_SURVEILLANCE_HISTORY_RETENTION`). The answer is the stored point closest to `at`, and `last_update` is when the gateway received that point, so clients can see how far it is from `at`. Exact repeats of the previous message are not stored; any other gap means no message arrived. `at` older than the retention, or more than a minute in the future, is a `400`; without surveillance history (no archive DB) it is a `503`.
+
+```bash
+curl -s -H 'X-API-Key: <key>' 'https://<EDGE_SERVER_NAME>/aods-monitor/api/surveillance/position?callsign=TG661&at=2026-10-27T09:45:00Z' | jq
+```
+
+The history is in `surveillance_track_point` in the AODS archive DB: one `UNLOGGED` partition per 10 minutes, created by the gateway, with partitions older than the retention dropped every minute. A full 30 minutes for 200 aircraft is about 11 MB. Errors are `{"error": "..."}` with `400` (bad callsign), `401` (missing or wrong key), `404` (no row), `500` (DB error) or `503` (API disabled).
 
 Key route fields:
 
@@ -125,6 +133,9 @@ The gateway and java broker read their settings from an untracked `.env` in the 
 - `GATEWAY_SURVEILLANCE_MONITOR_MAX_TRACKS` (default: `2000`): most tracks the surveillance page keeps; the least recently seen is dropped first.
 - `GATEWAY_SURVEILLANCE_MONITOR_TTL` (default: `15m`): a track with no message for this long is dropped.
 - `GATEWAY_SURVEILLANCE_API_KEYS` (default: empty, API off): comma-separated keys accepted in `X-API-Key` by the surveillance position API. Give each client its own key.
+- `GATEWAY_SURVEILLANCE_HISTORY_ENABLED` (default: `true`): keeps surveillance points in the AODS archive DB for `at=` lookups. Needs `AODS_ARCHIVE_DB_*`.
+- `GATEWAY_SURVEILLANCE_HISTORY_RETENTION` (default: `30m`): how far back `at=` can ask.
+- `GATEWAY_AODS_MESSAGE_ARCHIVE_ENABLED` (default: `true`): `false` stops archiving FLMO/IDEP messages while the archive DB stays connected for surveillance history. Production sets it to `false`.
 
 ## Quick debug workflow
 
