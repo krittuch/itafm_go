@@ -64,9 +64,11 @@ func TestProductionGatewayRunsSurveillanceAndIDEPOnly(t *testing.T) {
 	gatewayService := serviceBlock(t, readFile(t, "production.yml"), "gateway")
 
 	mustContain(t, gatewayService, `GATEWAY_FLIGHT_MOVEMENT_ENABLED: "false"`)
-	if strings.Contains(gatewayService, "AODS_ARCHIVE_DB_") {
-		t.Fatal("production gateway must not configure the AODS archive DB")
-	}
+	// The archive DB is connected only for surveillance history; FLMO/IDEP
+	// messages must still not be archived in production.
+	mustContain(t, gatewayService, `GATEWAY_AODS_MESSAGE_ARCHIVE_ENABLED: "false"`)
+	mustContain(t, gatewayService, `AODS_ARCHIVE_DB_PORT: "5436"`)
+	mustContain(t, serviceBlock(t, readFile(t, "production.yml"), "aods_archive_db"), `- "5436:5432"`)
 }
 
 func TestDevDeployWritesDotEnvFromEnvironmentSecrets(t *testing.T) {

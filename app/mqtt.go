@@ -41,12 +41,22 @@ func StartConsumeKafka(a *App) {
 		return
 	}
 
-	monitor := newGatewayMonitor(*kafkaFlightTopic, *kafkaIDEPTopic, *kafkaSURVTopic, a.AODSArchiveDB)
-	monitor.surveillancePositions = controller.NewSurveillanceController(a.DB)
-	monitor.start()
-	archiveStore := newAODSArchiveStore(a.AODSArchiveDB)
+	messageArchiveDB := a.AODSArchiveDB
+	if !lookupBoolEnvWithDefault("GATEWAY_AODS_MESSAGE_ARCHIVE_ENABLED", true) {
+		log.Println("FLMO/IDEP message archive disabled (GATEWAY_AODS_MESSAGE_ARCHIVE_ENABLED=false)")
+		messageArchiveDB = nil
+	}
+	history := startSurveillanceHistory(a.AODSArchiveDB)
 
-	go consumeSurveillanceStream(brokers, *kafkaGroupID, *kafkaSURVTopic, a.DB, monitor.route("surveillance"), monitor.surveillanceTracks)
+	monitor := newGatewayMonitor(*kafkaFlightTopic, *kafkaIDEPTopic, *kafkaSURVTopic, messageArchiveDB)
+	monitor.surveillancePositions = controller.NewSurveillanceController(a.DB)
+	if history != nil {
+		monitor.surveillanceHistory = history
+	}
+	monitor.start()
+	archiveStore := newAODSArchiveStore(messageArchiveDB)
+
+	go consumeSurveillanceStream(brokers, *kafkaGroupID, *kafkaSURVTopic, a.DB, monitor.route("surveillance"), monitor.surveillanceTracks, history)
 	go consumeIDEPStream(brokers, *kafkaGroupID, *kafkaIDEPTopic, a.DB, archiveStore, monitor.route("idep"))
 
 	if lookupBoolEnvWithDefault("GATEWAY_FLIGHT_MOVEMENT_ENABLED", true) {
@@ -87,6 +97,7 @@ func consumeSurveillanceStream(
 	db *sql.DB,
 	monitor *gatewayRouteMonitor,
 	tracks *surveillanceTrackStore,
+	history *surveillanceHistoryStore,
 ) {
 	survController := controller.NewSurveillanceController(db)
 	batchInterval := getSurveillanceDBBatchInterval()
@@ -102,12 +113,39 @@ func consumeSurveillanceStream(
 		monitor.RecordReceived()
 		result := onSurveillanceReceive(value, survBatcher)
 		tracks.record(result)
+		if result.Outcome == surveillanceOutcomeQueued {
+			history.record(result.Data)
+		}
 		if result.Outcome.written() {
 			monitor.RecordProcessed()
 		} else {
 			monitor.RecordSkipped()
 		}
 	})
+}
+
+func startSurveillanceHistory(db *sql.DB) *surveillanceHistoryStore {
+	if db == nil {
+		log.Println("surveillance history disabled (no AODS archive DB)")
+		return nil
+	}
+	if !lookupBoolEnvWithDefault("GATEWAY_SURVEILLANCE_HISTORY_ENABLED", true) {
+		log.Println("surveillance history disabled (GATEWAY_SURVEILLANCE_HISTORY_ENABLED=false)")
+		return nil
+	}
+
+	history := newSurveillanceHistoryStore(
+		db,
+		lookupDurationEnvWithDefault("GATEWAY_SURVEILLANCE_HISTORY_RETENTION", 30*time.Minute),
+		5*time.Second,
+		20000,
+	)
+	if err := history.start(); err != nil {
+		log.Printf("surveillance history disabled (setup error): %v", err)
+		return nil
+	}
+	log.Printf("surveillance history enabled: retention=%s", history.retention)
+	return history
 }
 
 func consumeIDEPStream(

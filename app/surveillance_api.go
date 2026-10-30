@@ -16,6 +16,11 @@ type surveillancePositionReader interface {
 	GetSurveillancePosition(ctx context.Context, callsigns []string) (*model.SurveillancePosition, error)
 }
 
+type surveillanceHistoryReader interface {
+	GetSurveillancePositionAt(ctx context.Context, callsigns []string, at time.Time) (*model.SurveillancePosition, error)
+	retentionWindow() time.Duration
+}
+
 type surveillancePositionResponse struct {
 	CallSign     string  `json:"callsign"`
 	Departure    string  `json:"departure"`
@@ -31,6 +36,9 @@ type surveillancePositionResponse struct {
 var surveillanceAPICallSignPattern = regexp.MustCompile(`^[A-Z0-9]{2,10}$`)
 
 const surveillanceAPIQueryTimeout = 5 * time.Second
+
+// Allows for a client clock slightly ahead of the gateway's.
+const surveillanceAPIFutureSkew = time.Minute
 
 func surveillanceAPIKeysFromEnv() []string {
 	keys := []string{}
@@ -65,7 +73,7 @@ func withSurveillanceAPIKey(keys []string, next http.HandlerFunc) http.HandlerFu
 	}
 }
 
-func handleSurveillancePosition(reader surveillancePositionReader) http.HandlerFunc {
+func handleSurveillancePosition(reader surveillancePositionReader, history surveillanceHistoryReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeSurveillanceAPIError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -77,14 +85,42 @@ func handleSurveillancePosition(reader surveillancePositionReader) http.HandlerF
 			writeSurveillanceAPIError(w, http.StatusBadRequest, "callsign must be 2-10 letters or digits, e.g. TG661 or THA661")
 			return
 		}
-		if reader == nil {
+		rawAt := strings.TrimSpace(r.URL.Query().Get("at"))
+		var at time.Time
+		if rawAt != "" {
+			if history == nil {
+				writeSurveillanceAPIError(w, http.StatusServiceUnavailable, "surveillance history unavailable")
+				return
+			}
+			parsed, err := time.Parse(time.RFC3339, rawAt)
+			if err != nil {
+				writeSurveillanceAPIError(w, http.StatusBadRequest, "at must be an RFC 3339 time, e.g. 2026-10-30T08:15:00Z")
+				return
+			}
+			now := time.Now()
+			retention := history.retentionWindow()
+			if parsed.Before(now.Add(-retention)) || parsed.After(now.Add(surveillanceAPIFutureSkew)) {
+				writeSurveillanceAPIError(w, http.StatusBadRequest, "at must be within the last "+retention.String())
+				return
+			}
+			at = parsed
+		} else if reader == nil {
 			writeSurveillanceAPIError(w, http.StatusServiceUnavailable, "surveillance database unavailable")
 			return
 		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), surveillanceAPIQueryTimeout)
 		defer cancel()
-		position, err := reader.GetSurveillancePosition(ctx, surveillanceAPICallSignCandidates(callsign))
+		candidates := surveillanceAPICallSignCandidates(callsign)
+		var (
+			position *model.SurveillancePosition
+			err      error
+		)
+		if at.IsZero() {
+			position, err = reader.GetSurveillancePosition(ctx, candidates)
+		} else {
+			position, err = history.GetSurveillancePositionAt(ctx, candidates, at)
+		}
 		if err != nil {
 			log.Printf("surveillance API lookup failed callsign=%s: %v", callsign, err)
 			writeSurveillanceAPIError(w, http.StatusInternalServerError, "lookup failed")

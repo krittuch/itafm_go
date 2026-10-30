@@ -30,7 +30,7 @@ func callSurveillancePositionAPI(keys []string, reader surveillancePositionReade
 		req.Header.Set("X-API-Key", apiKey)
 	}
 	rec := httptest.NewRecorder()
-	withSurveillanceAPIKey(keys, handleSurveillancePosition(reader))(rec, req)
+	withSurveillanceAPIKey(keys, handleSurveillancePosition(reader, nil))(rec, req)
 	return rec
 }
 
@@ -117,7 +117,7 @@ func TestSurveillancePositionAPIErrors(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/surveillance/position?callsign=TG661", nil)
 	req.Header.Set("X-API-Key", "k1")
 	rec = httptest.NewRecorder()
-	withSurveillanceAPIKey(keys, handleSurveillancePosition(&fakeSurveillancePositionReader{}))(rec, req)
+	withSurveillanceAPIKey(keys, handleSurveillancePosition(&fakeSurveillancePositionReader{}, nil))(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST: got %d, want 405", rec.Code)
 	}

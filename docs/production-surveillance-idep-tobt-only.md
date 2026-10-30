@@ -24,3 +24,7 @@ On 2026-10-27 the user asked that production use only two things: surveillance, 
 - `go vet ./...` and `CGO_ENABLED=0 go test ./...` pass.
 - Before the bay write was commented out, the binary was started with the production settings and an unreachable Kafka broker. It logged `AODS archive DB disabled` and `flight movement consumer disabled`, and started only the surveillance and IDEP consumers.
 - Not tested: a deploy with real Kafka and Postgres. Each server must rebuild the gateway image for this to take effect, because the image bakes in the source (for production: `docker compose -f production.yml up -d --build gateway`).
+
+## Later change
+
+On 2026-10-30 the production gateway was connected to `aods_archive_db` again, for surveillance history only. `GATEWAY_AODS_MESSAGE_ARCHIVE_ENABLED: "false"` keeps FLMO/IDEP messages out of the archive. See `docs/surveillance-history.md`.

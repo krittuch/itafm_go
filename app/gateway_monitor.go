@@ -109,6 +109,7 @@ type gatewayMonitor struct {
 
 	surveillanceTracks    *surveillanceTrackStore
 	surveillancePositions surveillancePositionReader
+	surveillanceHistory   surveillanceHistoryReader
 }
 
 func newGatewayMonitor(flightTopic, idepTopic, survTopic string, archiveDB *sql.DB) *gatewayMonitor {
@@ -169,7 +170,7 @@ func (m *gatewayMonitor) start() {
 	surveillanceHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleSurveillance)
 	indexHandler := m.withMonitorBasicAuth(authEnabled, authUsername, authPassword, m.handleIndex)
 	surveillanceAPIKeys := surveillanceAPIKeysFromEnv()
-	surveillanceAPIHandler := withSurveillanceAPIKey(surveillanceAPIKeys, handleSurveillancePosition(m.surveillancePositions))
+	surveillanceAPIHandler := withSurveillanceAPIKey(surveillanceAPIKeys, handleSurveillancePosition(m.surveillancePositions, m.surveillanceHistory))
 	dispatchHandler := func(w http.ResponseWriter, r *http.Request) {
 		switch monitorEndpointSuffix(r) {
 		case "/health":
